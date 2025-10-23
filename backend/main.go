@@ -41,11 +41,15 @@ func main() {
 		w.Write([]byte(`{"status": "healthy", "message": "UniLink backend is running"}`))
 	}).Methods("GET")
 
-	// Protected routes will be added here later
-	// Example:
-	// protected := router.PathPrefix("/api").Subrouter()
-	// protected.Use(utils.ValidateToken)
-	// protected.HandleFunc("/listings", handlers.GetListings).Methods("GET")
+	// Protected routes (require authentication)
+	protected := router.PathPrefix("/api").Subrouter()
+	protected.Use(utils.ValidateToken) // All routes here require valid JWT
+
+	protected.HandleFunc("/listings", handlers.GetAllListings).Methods("GET")
+	protected.HandleFunc("/listings", handlers.CreateListing).Methods("POST")
+	protected.HandleFunc("/listings/my", handlers.GetMyListings).Methods("GET") // MUST come before /{id}
+	protected.HandleFunc("/listings/{id}", handlers.GetListingByID).Methods("GET")
+	protected.HandleFunc("/listings/{id}", handlers.DeleteListing).Methods("DELETE")
 
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
