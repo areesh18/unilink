@@ -23,7 +23,7 @@ type User struct {
 	Name         string `gorm:"not null" json:"name"`
 	Email        string `gorm:"uniqueIndex;not null" json:"email"`
 	PasswordHash string `gorm:"not null" json:"-"`                      // Never send to frontend
-	Role         string `gorm:"not null;default:'student'" json:"role"` // "student", "admin"
+	Role         string `gorm:"not null;default:'student'" json:"role"` // "student", "college_admin", "platform_admin"
 	StudentID    string `gorm:"uniqueIndex;not null" json:"studentId"`  // e.g., "21BCE1001"
 
 	// Foreign Key Relationship

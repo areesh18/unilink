@@ -33,6 +33,10 @@ func main() {
 	router.HandleFunc("/api/check-college", handlers.CheckCollege).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/register", handlers.RegisterStudent).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/login", handlers.Login).Methods("POST", "OPTIONS")
+	router.HandleFunc("/api/admin/login", handlers.LoginAdmin).Methods("POST", "OPTIONS")
+
+	// TEMPORARY: First-time platform admin setup (REMOVE AFTER FIRST ADMIN CREATED)
+	router.HandleFunc("/api/setup/platform-admin", handlers.CreateFirstPlatformAdmin).Methods("POST", "OPTIONS")
 
 	// Health check endpoint
 	router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +55,28 @@ func main() {
 	protected.HandleFunc("/listings/{id}", handlers.GetListingByID).Methods("GET")
 	protected.HandleFunc("/listings/{id}", handlers.DeleteListing).Methods("DELETE")
 
+	// ============================================
+	// COLLEGE ADMIN ROUTES (College-Scoped)
+	// ============================================
+	collegeAdmin := protected.PathPrefix("/college-admin").Subrouter()
+	collegeAdmin.Use(utils.RequireRole("college_admin"))
+
+	collegeAdmin.HandleFunc("/students", handlers.GetCollegeStudents).Methods("GET")
+	collegeAdmin.HandleFunc("/listings", handlers.GetCollegeListings).Methods("GET")
+	collegeAdmin.HandleFunc("/listings/{id}", handlers.DeleteCollegeListing).Methods("DELETE")
+	collegeAdmin.HandleFunc("/stats", handlers.GetCollegeStats).Methods("GET")
+
+	// ============================================
+	// PLATFORM ADMIN ROUTES (Global Access)
+	// ============================================
+	platformAdmin := protected.PathPrefix("/platform-admin").Subrouter()
+	platformAdmin.Use(utils.RequireRole("platform_admin"))
+
+	platformAdmin.HandleFunc("/colleges", handlers.AddCollege).Methods("POST")
+	platformAdmin.HandleFunc("/college-admins", handlers.CreateCollegeAdmin).Methods("POST")
+	platformAdmin.HandleFunc("/students", handlers.GetAllStudents).Methods("GET")
+	platformAdmin.HandleFunc("/listings", handlers.GetAllListingsPlatform).Methods("GET")
+	platformAdmin.HandleFunc("/stats", handlers.GetPlatformStats).Methods("GET")
 	// Get port from environment or use default
 	port := os.Getenv("PORT")
 	if port == "" {

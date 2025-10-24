@@ -78,3 +78,22 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
+
+// RequireAnyAdminRole allows both college_admin and platform_admin
+func RequireAnyAdminRole(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(UserClaimsKey).(*CustomClaims)
+		if !ok {
+			respondWithError(w, http.StatusUnauthorized, "User claims not found in context")
+			return
+		}
+
+		// Check if user is any type of admin
+		if claims.Role != "college_admin" && claims.Role != "platform_admin" {
+			respondWithError(w, http.StatusForbidden, "Admin access required")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
