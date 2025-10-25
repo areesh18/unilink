@@ -47,6 +47,11 @@ type UserResponseData struct {
 	Email          string `json:"email"`
 	Role           string `json:"role"`
 	StudentID      string `json:"studentId"`
+	ProfilePicture    string `json:"profilePicture"` // NEW
+	Bio               string `json:"bio"`            // NEW
+	Department        string `json:"department"`     // NEW
+	Semester          int    `json:"semester"`       // NEW
+	IsPublic          bool   `json:"isPublic"`       // NEW
 	CollegeID      uint   `json:"collegeId"`
 	CollegeCode    string `json:"collegeCode"`
 	CollegeName    string `json:"collegeName"`
@@ -204,6 +209,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		Email:          user.Email,
 		Role:           user.Role,
 		StudentID:      user.StudentID,
+		ProfilePicture:    user.ProfilePicture, // NEW
+		Bio:               user.Bio,            // NEW
+		Department:        user.Department,     // NEW
+		Semester:          user.Semester,       // NEW
+		IsPublic:          user.IsPublic,       // NEW
 		CollegeID:      user.CollegeID,
 		CollegeCode:    user.College.CollegeCode,
 		CollegeName:    user.College.Name,
