@@ -66,6 +66,15 @@ func main() {
 	// Student announcement feed (Module 2)
 	protected.HandleFunc("/feed", handlers.GetStudentFeed).Methods("GET")
 
+	// Friend system routes (Module 3)
+	protected.HandleFunc("/friends/request", handlers.SendFriendRequest).Methods("POST")
+	protected.HandleFunc("/friends/requests/pending", handlers.GetPendingRequests).Methods("GET")
+	protected.HandleFunc("/friends/accept/{id}", handlers.AcceptFriendRequest).Methods("POST")
+	protected.HandleFunc("/friends/reject/{id}", handlers.RejectFriendRequest).Methods("POST")
+	protected.HandleFunc("/friends", handlers.GetFriends).Methods("GET")
+	protected.HandleFunc("/friends/{id}", handlers.RemoveFriend).Methods("DELETE")
+	protected.HandleFunc("/friends/suggestions", handlers.GetFriendSuggestions).Methods("GET")
+
 	// ============================================
 	// COLLEGE ADMIN ROUTES (College-Scoped)
 	// ============================================
@@ -81,7 +90,6 @@ func main() {
 	collegeAdmin.HandleFunc("/announcements", handlers.GetCollegeAnnouncements).Methods("GET")
 	collegeAdmin.HandleFunc("/announcements/{id}", handlers.UpdateAnnouncement).Methods("PUT")
 	collegeAdmin.HandleFunc("/announcements/{id}", handlers.DeleteAnnouncement).Methods("DELETE")
-
 
 	// ============================================
 	// PLATFORM ADMIN ROUTES (Global Access)
