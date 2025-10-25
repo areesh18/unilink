@@ -7,6 +7,8 @@ type StudentInfo struct {
 	StudentID string
 	Name      string
 	Email     string
+	Department string // NEW: Student's department
+	Semester   int    // NEW: Current semester
 	IsValid   bool
 }
 
@@ -18,19 +20,33 @@ var MockCollegeDatabase = map[string]map[string]StudentInfo{
 			StudentID: "21BCE1001",
 			Name:      "Alice Smith",
 			Email:     "alice.smith@vitstudent.ac.in",
+			Department: "Computer Science and Engineering",
+			Semester:   4,
 			IsValid:   true,
 		},
 		"21BCE1002": {
 			StudentID: "21BCE1002",
 			Name:      "Bob Johnson",
 			Email:     "bob.johnson@vitstudent.ac.in",
+			Department: "Electronics and Communication Engineering",
+			Semester:   6,
 			IsValid:   true,
 		},
 		"21BCE1003": {
 			StudentID: "21BCE1003",
 			Name:      "Charlie Brown",
 			Email:     "charlie.brown@vitstudent.ac.in",
+			Department: "Computer Science and Engineering",
+			Semester:   4,
 			IsValid:   true,
+		},
+		"21BCE1004": {
+			StudentID:  "21BCE1004",
+			Name:       "Diana Prince",
+			Email:      "diana.prince@vitstudent.ac.in",
+			Department: "Mechanical Engineering",
+			Semester:   2,
+			IsValid:    true,
 		},
 	},
 	"MIT": {
@@ -38,12 +54,16 @@ var MockCollegeDatabase = map[string]map[string]StudentInfo{
 			StudentID: "MIT2024001",
 			Name:      "David Lee",
 			Email:     "dlee@mit.edu",
+			Department: "Computer Science",
+			Semester:   6,
 			IsValid:   true,
 		},
 		"MIT2024002": {
 			StudentID: "MIT2024002",
 			Name:      "Emma Wilson",
 			Email:     "ewilson@mit.edu",
+			Department: "Electrical Engineering",
+			Semester:   4,
 			IsValid:   true,
 		},
 	},
@@ -52,12 +72,16 @@ var MockCollegeDatabase = map[string]map[string]StudentInfo{
 			StudentID: "STAN2024001",
 			Name:      "Frank Zhang",
 			Email:     "fzhang@stanford.edu",
+			Department: "Computer Science",
+			Semester:   8,
 			IsValid:   true,
 		},
 		"STAN2024002": {
 			StudentID: "STAN2024002",
 			Name:      "Grace Kim",
 			Email:     "gkim@stanford.edu",
+			Department: "Bioengineering",
+			Semester:   2,
 			IsValid:   true,
 		},
 	},

@@ -146,6 +146,8 @@ func RegisterStudent(w http.ResponseWriter, r *http.Request) {
 		Role:         "student", // Default role
 		StudentID:    req.StudentID,
 		CollegeID:    college.ID, // Link to college
+		Department:   studentInfo.Department, // NEW: From mock DB
+		Semester:     studentInfo.Semester,   // NEW: From mock DB
 	}
 
 	result = db.DB.Create(&newUser)

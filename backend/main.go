@@ -49,11 +49,19 @@ func main() {
 	protected := router.PathPrefix("/api").Subrouter()
 	protected.Use(utils.ValidateToken) // All routes here require valid JWT
 
+	// Student marketplace routes
 	protected.HandleFunc("/listings", handlers.GetAllListings).Methods("GET")
 	protected.HandleFunc("/listings", handlers.CreateListing).Methods("POST")
 	protected.HandleFunc("/listings/my", handlers.GetMyListings).Methods("GET") // MUST come before /{id}
 	protected.HandleFunc("/listings/{id}", handlers.GetListingByID).Methods("GET")
 	protected.HandleFunc("/listings/{id}", handlers.DeleteListing).Methods("DELETE")
+
+	// Profile routes (Module 1)
+	protected.HandleFunc("/profile/me", handlers.GetMyProfile).Methods("GET")
+	protected.HandleFunc("/profile/me", handlers.UpdateMyProfile).Methods("PUT")
+	protected.HandleFunc("/profile/{id}", handlers.GetUserProfile).Methods("GET")
+	protected.HandleFunc("/directory", handlers.SearchDirectory).Methods("GET")
+	protected.HandleFunc("/departments", handlers.GetDepartments).Methods("GET")
 
 	// ============================================
 	// COLLEGE ADMIN ROUTES (College-Scoped)

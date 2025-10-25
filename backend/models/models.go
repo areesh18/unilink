@@ -26,6 +26,14 @@ type User struct {
 	Role         string `gorm:"not null;default:'student'" json:"role"` // "student", "college_admin", "platform_admin"
 	StudentID    string `gorm:"uniqueIndex;not null" json:"studentId"`  // e.g., "21BCE1001"
 
+	// Profile fields (Module 1)
+	ProfilePicture string         `json:"profilePicture"` // URL to profile image
+	Bio            string         `gorm:"type:text" json:"bio"`
+	Department     string         `json:"department"` // e.g., "Computer Science"
+	Semester       int            `json:"semester"`   // e.g., 4
+	IsPublic       bool           `gorm:"default:true" json:"isPublic"` // Privacy control
+	Status         string         `gorm:"default:'active'" json:"status"` // "active", "suspended"
+	
 	// Foreign Key Relationship
 	CollegeID uint    `gorm:"not null" json:"collegeId"`
 	College   College `gorm:"foreignKey:CollegeID" json:"college"` // Preload this for JWT
