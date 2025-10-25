@@ -27,13 +27,13 @@ type User struct {
 	StudentID    string `gorm:"uniqueIndex;not null" json:"studentId"`  // e.g., "21BCE1001"
 
 	// Profile fields (Module 1)
-	ProfilePicture string         `json:"profilePicture"` // URL to profile image
-	Bio            string         `gorm:"type:text" json:"bio"`
-	Department     string         `json:"department"` // e.g., "Computer Science"
-	Semester       int            `json:"semester"`   // e.g., 4
-	IsPublic       bool           `gorm:"default:true" json:"isPublic"` // Privacy control
-	Status         string         `gorm:"default:'active'" json:"status"` // "active", "suspended"
-	
+	ProfilePicture string `json:"profilePicture"` // URL to profile image
+	Bio            string `gorm:"type:text" json:"bio"`
+	Department     string `json:"department"`                     // e.g., "Computer Science"
+	Semester       int    `json:"semester"`                       // e.g., 4
+	IsPublic       bool   `gorm:"default:true" json:"isPublic"`   // Privacy control
+	Status         string `gorm:"default:'active'" json:"status"` // "active", "suspended"
+
 	// Foreign Key Relationship
 	CollegeID uint    `gorm:"not null" json:"collegeId"`
 	College   College `gorm:"foreignKey:CollegeID" json:"college"` // Preload this for JWT
@@ -57,6 +57,28 @@ type MarketplaceListing struct {
 	Seller    User    `gorm:"foreignKey:SellerID" json:"seller"`
 	CollegeID uint    `gorm:"not null" json:"collegeId"` // CRITICAL: College isolation
 	College   College `gorm:"foreignKey:CollegeID" json:"college"`
+
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// Announcement represents official notices from college admins (Module 2)
+type Announcement struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	Title    string `gorm:"not null" json:"title"`
+	Content  string `gorm:"type:text;not null" json:"content"`
+	Priority string `gorm:"default:'medium'" json:"priority"` // "low", "medium", "high"
+
+	// Targeting - determines who sees this announcement
+	CollegeID  uint    `gorm:"not null" json:"collegeId"`
+	College    College `gorm:"foreignKey:CollegeID" json:"college"`
+	Department *string `json:"department"` // nil = all departments
+	Semester   *int    `json:"semester"`   // nil = all semesters
+
+	// Author
+	CreatedBy uint `gorm:"not null" json:"createdBy"`
+	Author    User `gorm:"foreignKey:CreatedBy" json:"author"`
 
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
