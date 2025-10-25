@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"unilink-backend/db"
 	"unilink-backend/models"
@@ -47,11 +49,11 @@ type UserResponseData struct {
 	Email          string `json:"email"`
 	Role           string `json:"role"`
 	StudentID      string `json:"studentId"`
-	ProfilePicture    string `json:"profilePicture"` // NEW
-	Bio               string `json:"bio"`            // NEW
-	Department        string `json:"department"`     // NEW
-	Semester          int    `json:"semester"`       // NEW
-	IsPublic          bool   `json:"isPublic"`       // NEW
+	ProfilePicture string `json:"profilePicture"` // NEW
+	Bio            string `json:"bio"`            // NEW
+	Department     string `json:"department"`     // NEW
+	Semester       int    `json:"semester"`       // NEW
+	IsPublic       bool   `json:"isPublic"`       // NEW
 	CollegeID      uint   `json:"collegeId"`
 	CollegeCode    string `json:"collegeCode"`
 	CollegeName    string `json:"collegeName"`
@@ -150,7 +152,7 @@ func RegisterStudent(w http.ResponseWriter, r *http.Request) {
 		PasswordHash: passwordHash,
 		Role:         "student", // Default role
 		StudentID:    req.StudentID,
-		CollegeID:    college.ID, // Link to college
+		CollegeID:    college.ID,             // Link to college
 		Department:   studentInfo.Department, // NEW: From mock DB
 		Semester:     studentInfo.Semester,   // NEW: From mock DB
 	}
@@ -160,6 +162,9 @@ func RegisterStudent(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create user")
 		return
 	}
+
+	// NEW: Auto-join student to their department and semester groups (Module 3)
+	autoJoinGroups(&newUser)
 
 	respondWithJSON(w, http.StatusCreated, map[string]string{
 		"message": "Registration successful",
@@ -209,11 +214,11 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		Email:          user.Email,
 		Role:           user.Role,
 		StudentID:      user.StudentID,
-		ProfilePicture:    user.ProfilePicture, // NEW
-		Bio:               user.Bio,            // NEW
-		Department:        user.Department,     // NEW
-		Semester:          user.Semester,       // NEW
-		IsPublic:          user.IsPublic,       // NEW
+		ProfilePicture: user.ProfilePicture, // NEW
+		Bio:            user.Bio,            // NEW
+		Department:     user.Department,     // NEW
+		Semester:       user.Semester,       // NEW
+		IsPublic:       user.IsPublic,       // NEW
 		CollegeID:      user.CollegeID,
 		CollegeCode:    user.College.CollegeCode,
 		CollegeName:    user.College.Name,
@@ -239,4 +244,68 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 // Helper function to send error responses
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+// autoJoinGroups automatically adds a new student to their department and semester groups
+func autoJoinGroups(user *models.User) {
+	// Only auto-join for students
+	if user.Role != "student" {
+		return
+	}
+
+	// 1. Find or create department group (e.g., "Computer Science and Engineering")
+	deptGroupName := user.Department
+	var deptGroup models.Group
+
+	result := db.DB.Where("college_id = ? AND type = ? AND department = ? AND semester IS NULL",
+		user.CollegeID, "auto", user.Department).First(&deptGroup)
+
+	if result.Error != nil {
+		// Create the department group if it doesn't exist
+		deptGroup = models.Group{
+			Name:        deptGroupName,
+			Description: "Official group for all " + user.Department + " students",
+			Type:        "auto",
+			CollegeID:   user.CollegeID,
+			Department:  &user.Department,
+			Semester:    nil, // Department-wide group
+		}
+		db.DB.Create(&deptGroup)
+	}
+
+	// Add user to department group
+	db.DB.Create(&models.GroupMember{
+		GroupID:  deptGroup.ID,
+		UserID:   user.ID,
+		Role:     "member",
+		JoinedAt: time.Now(),
+	})
+
+	// 2. Find or create department + semester group (e.g., "CSE - Semester 4")
+	semGroupName := fmt.Sprintf("%s - Semester %d", user.Department, user.Semester)
+	var semGroup models.Group
+
+	result = db.DB.Where("college_id = ? AND type = ? AND department = ? AND semester = ?",
+		user.CollegeID, "auto", user.Department, user.Semester).First(&semGroup)
+
+	if result.Error != nil {
+		// Create the semester group if it doesn't exist
+		semGroup = models.Group{
+			Name:        semGroupName,
+			Description: fmt.Sprintf("Official group for %s Semester %d students", user.Department, user.Semester),
+			Type:        "auto",
+			CollegeID:   user.CollegeID,
+			Department:  &user.Department,
+			Semester:    &user.Semester,
+		}
+		db.DB.Create(&semGroup)
+	}
+
+	// Add user to semester group
+	db.DB.Create(&models.GroupMember{
+		GroupID:  semGroup.ID,
+		UserID:   user.ID,
+		Role:     "member",
+		JoinedAt: time.Now(),
+	})
 }

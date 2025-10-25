@@ -95,3 +95,85 @@ type JWTClaims struct {
 	CollegeCode    string `json:"collegeCode"`
 	CollegeLogoURL string `json:"collegeLogoUrl"`
 }
+
+// Friendship represents friend connections between students (Module 3)
+type Friendship struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"not null" json:"userId"`
+	User      User      `gorm:"foreignKey:UserID" json:"user"`
+	FriendID  uint      `gorm:"not null" json:"friendId"`
+	Friend    User      `gorm:"foreignKey:FriendID" json:"friend"`
+	Status    string    `gorm:"default:'pending'" json:"status"` // "pending", "accepted", "rejected", "blocked"
+	CollegeID uint      `gorm:"not null" json:"collegeId"`       // Both users must be from same college
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Group represents chat groups (auto-created department/semester groups or public clubs)
+type Group struct {
+	ID          uint   `gorm:"primaryKey" json:"id"`
+	Name        string `gorm:"not null" json:"name"`
+	Description string `gorm:"type:text" json:"description"`
+	Type        string `gorm:"not null" json:"type"` // "auto" (dept/sem) or "public" (clubs)
+	Avatar      string `json:"avatar"`               // Group image URL
+
+	// College isolation
+	CollegeID uint    `gorm:"not null" json:"collegeId"`
+	College   College `gorm:"foreignKey:CollegeID" json:"college"`
+
+	// For auto groups (department/semester groups)
+	Department *string `json:"department"` // e.g., "Computer Science and Engineering"
+	Semester   *int    `json:"semester"`   // e.g., 4
+
+	// For public groups (clubs)
+	CreatedBy *uint `json:"createdBy"` // User who created the club
+	Creator   *User `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
+
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// GroupMember represents membership in a group
+type GroupMember struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	GroupID   uint      `gorm:"not null" json:"groupId"`
+	Group     Group     `gorm:"foreignKey:GroupID" json:"group"`
+	UserID    uint      `gorm:"not null" json:"userId"`
+	User      User      `gorm:"foreignKey:UserID" json:"user"`
+	Role      string    `gorm:"default:'member'" json:"role"` // "member", "moderator", "admin"
+	JoinedAt  time.Time `json:"joinedAt"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// Message represents a chat message (DM or group)
+type Message struct {
+	ID      uint   `gorm:"primaryKey" json:"id"`
+	Content string `gorm:"type:text;not null" json:"content"`
+	Type    string `gorm:"default:'text'" json:"type"` // "text", "image", "file"
+
+	// Conversation identification
+	ConversationType string `gorm:"not null" json:"conversationType"`     // "dm" or "group"
+	ConversationID   string `gorm:"not null;index" json:"conversationId"` // Format: "dm_{userId1}_{userId2}" or "group_{groupId}"
+
+	// Sender
+	SenderID uint `gorm:"not null" json:"senderId"`
+	Sender   User `gorm:"foreignKey:SenderID" json:"sender"`
+
+	// For DMs - store both participant IDs for easier querying
+	ReceiverID *uint `json:"receiverId,omitempty"` // Only for DMs
+
+	// For Group messages
+	GroupID *uint `json:"groupId,omitempty"` // Only for group messages
+
+	// Message status
+	IsRead    bool `gorm:"default:false" json:"isRead"`
+	IsDeleted bool `gorm:"default:false" json:"isDeleted"`
+
+	// College isolation (for security)
+	CollegeID uint `gorm:"not null" json:"collegeId"`
+
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}

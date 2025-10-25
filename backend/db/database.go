@@ -36,6 +36,10 @@ func ConnectDB() {
 		&models.User{},
 		&models.MarketplaceListing{},
 		&models.Announcement{},
+		&models.Friendship{},  // Module 3
+		&models.Group{},       // Module 3
+		&models.GroupMember{}, // Module 3
+		&models.Message{},     // Module 3
 	)
 
 	if err != nil {
