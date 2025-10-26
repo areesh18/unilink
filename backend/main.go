@@ -75,6 +75,13 @@ func main() {
 	protected.HandleFunc("/friends/{id}", handlers.RemoveFriend).Methods("DELETE")
 	protected.HandleFunc("/friends/suggestions", handlers.GetFriendSuggestions).Methods("GET")
 
+	// Group system routes (Module 3) - Students can only browse and join
+	protected.HandleFunc("/groups/my", handlers.GetMyGroups).Methods("GET")
+	protected.HandleFunc("/groups/public", handlers.GetPublicGroups).Methods("GET")
+	protected.HandleFunc("/groups/{id}", handlers.GetGroupDetail).Methods("GET")
+	protected.HandleFunc("/groups/{id}/join", handlers.JoinGroup).Methods("POST")
+	protected.HandleFunc("/groups/{id}/leave", handlers.LeaveGroup).Methods("POST")
+
 	// ============================================
 	// COLLEGE ADMIN ROUTES (College-Scoped)
 	// ============================================
@@ -90,6 +97,11 @@ func main() {
 	collegeAdmin.HandleFunc("/announcements", handlers.GetCollegeAnnouncements).Methods("GET")
 	collegeAdmin.HandleFunc("/announcements/{id}", handlers.UpdateAnnouncement).Methods("PUT")
 	collegeAdmin.HandleFunc("/announcements/{id}", handlers.DeleteAnnouncement).Methods("DELETE")
+
+	// Group management (Module 3) - Admin-only group creation
+	collegeAdmin.HandleFunc("/groups", handlers.CreatePublicGroup).Methods("POST")
+	collegeAdmin.HandleFunc("/groups", handlers.GetCollegeGroups).Methods("GET")
+	collegeAdmin.HandleFunc("/groups/{id}", handlers.DeleteGroup).Methods("DELETE")
 
 	// ============================================
 	// PLATFORM ADMIN ROUTES (Global Access)
