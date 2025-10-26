@@ -82,6 +82,11 @@ func main() {
 	protected.HandleFunc("/groups/{id}/join", handlers.JoinGroup).Methods("POST")
 	protected.HandleFunc("/groups/{id}/leave", handlers.LeaveGroup).Methods("POST")
 
+	// Messaging routes (Module 3)
+	protected.HandleFunc("/conversations", handlers.GetConversations).Methods("GET")
+	protected.HandleFunc("/conversations/{conversationId}/messages", handlers.GetMessages).Methods("GET")
+	protected.HandleFunc("/conversations/{conversationId}/messages", handlers.SendMessage).Methods("POST")
+	protected.HandleFunc("/messages/{id}", handlers.DeleteMessage).Methods("DELETE")
 	// ============================================
 	// COLLEGE ADMIN ROUTES (College-Scoped)
 	// ============================================
