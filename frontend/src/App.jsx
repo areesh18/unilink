@@ -21,6 +21,7 @@ import AdminLayout from './layouts/AdminLayout'; // <-- Import Admin Layout
 import AdminDashboard from './pages/AdminDashboard';
 
 import AdminAnnouncementsPage from './pages/AdminAnnouncementsPage';
+import AdminStudentListPage from './pages/AdminStudentListPage';
 function App() {
   return (
     <div>
@@ -59,7 +60,7 @@ function App() {
              <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
              {/* College Admin Pages (will create content for these next) */}
-             <Route path="/admin/students" element={<h1>College Student List Page</h1>} />
+             <Route path="/admin/students" element={<AdminStudentListPage />} />
              <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
              <Route path="/admin/listings" element={<h1>College Marketplace Mgt</h1>} />
              <Route path="/admin/groups" element={<h1>College Group Mgt</h1>} />

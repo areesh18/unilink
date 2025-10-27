@@ -63,4 +63,18 @@ export const deleteAnnouncement = async (announcementId) => {
         throw error.response?.data?.error || error.message || 'Failed to delete announcement';
     }
 };
+// Fetch all student users from the admin's college
+export const fetchCollegeStudents = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/college-admin/students
+        const response = await axios.get('/api/college-admin/students', config);
+        // The backend returns an array of objects like:
+        // { id, name, email, studentId, createdAt }
+        return response.data || [];
+    } catch (error) {
+        console.error("Error fetching college students:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch college students';
+    }
+};
 // Add other admin-related API calls here later
