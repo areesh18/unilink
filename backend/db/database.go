@@ -50,6 +50,7 @@ func ConnectDB() {
 
 	// Seed initial colleges (only if table is empty)
 	seedColleges()
+	/* SeedTMSLStudents(DB) */
 }
 
 // seedColleges adds initial college data to the database
