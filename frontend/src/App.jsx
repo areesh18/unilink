@@ -1,37 +1,35 @@
+// src/App.jsx
 import React from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
-
-// --- Import actual pages ---
-import HomePage from './pages/HomePage'; // Assuming you have HomePage.jsx
-import Login from './pages/Login'; // Import the actual Login component
-import Register from './pages/Register'; // Import the placeholder for now
-import Dashboard from './pages/Dashboard'; // Import the placeholder for now
-import ProtectedRoute from './components/ProtectedRoute';
-// --- End Imports ---
-
+import { Routes, Route } from 'react-router-dom';
+import AppLayout from './layouts/AppLayout'; // <-- Import layout
+import HomePage from './pages/HomePage';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
   return (
-    // Remove the outer p-4 div if pages handle their own layout/padding
     <div>
       <Routes>
-        {/* Public Routes */}
+        {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Protected Routes */}
-        <Route element={<ProtectedRoute />}> {/* Wrap protected routes */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          {/* Add other protected routes here later (e.g., /profile, /settings) */}
-          {/* Example: <Route path="/profile" element={<ProfilePage />} /> */}
+        {/* Protected */}
+        <Route element={<ProtectedRoute />}> {/* Authentication */}
+          <Route element={<AppLayout />}> {/* Layout */}
+            {/* Pages inside layout */}
+            <Route path="/dashboard" element={<Dashboard />} />
+            {/* Add other protected pages here */}
+          </Route>
         </Route>
 
-        {/* Catch-all Not Found Route */}
-        <Route path="*" element={<h1 className="text-center text-red-500 mt-10">404 Not Found</h1>} />
+        {/* Not Found */}
+        <Route path="*" element={<h1>404 Not Found</h1>} />
       </Routes>
     </div>
   );
 }
-
 export default App;
