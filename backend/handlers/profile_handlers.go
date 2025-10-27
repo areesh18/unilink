@@ -153,11 +153,39 @@ func GetUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check privacy settings
+	/* // Check privacy settings
 	if !user.IsPublic && user.ID != claims.UserID {
 		respondWithError(w, http.StatusForbidden, "This profile is private")
 		return
+	} */
+	// --- Updated Privacy Check ---
+	// Allow access if:
+	// 1. It's the user's own profile (user.ID == claims.UserID)
+	// 2. The profile is public (user.IsPublic)
+	// 3. They are friends (check friendship table)
+	isOwnProfile := user.ID == claims.UserID
+	canView := isOwnProfile || user.IsPublic
+
+	if !canView { // If not own profile and not public, check friendship
+		var friendship models.Friendship
+		resultFriendship := db.DB.Where(
+			"((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = ?",
+			claims.UserID, user.ID, // Check both directions
+			user.ID, claims.UserID,
+			"accepted", // Must be accepted friends
+		).First(&friendship)
+
+		if resultFriendship.Error == nil { // If a friendship record is found
+			canView = true // Friends can view private profiles
+		}
 	}
+
+	// Final check
+	if !canView {
+		respondWithError(w, http.StatusForbidden, "This profile is private or you do not have access.")
+		return
+	}
+	// --- End Updated Privacy Check ---
 
 	// Transform to response
 	profile := ProfileResponse{

@@ -10,6 +10,8 @@ import Marketplace from './pages/MarketPlace';
 import CreateListingPage from './pages/CreateListingPage';
 import ListingDetailPage from './pages/ListingDetailPage';
 import FeedPage from './pages/FeedPage';
+import Friendspage from './pages/Friendspage';
+import ProfilePage from './pages/ProfilePage';
 import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
@@ -32,6 +34,11 @@ function App() {
             <Route path="/market/:id" element={<ListingDetailPage />} />
             {/* Feed Route */}
             <Route path="/feed" element={<FeedPage />} />
+            {/* Friends Route */}
+            <Route path="/friends" element={<Friendspage />} />
+            {/* Profile Routes */}
+            <Route path="/profile/me" element={<ProfilePage />} />
+            <Route path="/profile/:id" element={<ProfilePage />} />
             {/* Add other protected pages here */}
           </Route>
         </Route>

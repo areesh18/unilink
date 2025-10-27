@@ -57,13 +57,23 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('userData');
     navigate('/login');
   };
-
+  // Function to update user data in context and localStorage
+  const updateUserContext = (newUserData) => {
+    if (newUserData) {
+        setUser(newUserData);
+        localStorage.setItem('userData', JSON.stringify(newUserData));
+        console.log("AuthContext user updated:", newUserData);
+    } else {
+        console.error("Attempted to update user context with invalid data");
+    }
+  };
   const value = {
     user,
     token,
     isLoading,
     login,
     logout,
+    updateUserContext,
   };
 
   return (

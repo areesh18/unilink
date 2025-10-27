@@ -20,6 +20,7 @@ function Sidebar() {
     { name: 'Feed', path: '/feed', icon: FeedIcon },
     { name: 'Chat', path: '/chat', icon: ChatIcon },
     { name: 'Friends', path: '/friends', icon: FriendsIcon },
+    { name: 'My Profile', path: `/profile/me`, icon: ProfileIcon },
   ];
 
   const secondaryNavLinks = [
