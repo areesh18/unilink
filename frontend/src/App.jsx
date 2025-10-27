@@ -12,6 +12,7 @@ import ListingDetailPage from './pages/ListingDetailPage';
 import FeedPage from './pages/FeedPage';
 import Friendspage from './pages/Friendspage';
 import ProfilePage from './pages/ProfilePage';
+import ChatPage from './pages/ChatPage';
 import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
@@ -39,6 +40,10 @@ function App() {
             {/* Profile Routes */}
             <Route path="/profile/me" element={<ProfilePage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
+
+            {/* Chat Route */}
+             <Route path="/chat" element={<ChatPage />} /> {/* <-- 2. Add Chat route */}
+            {/* Optional: Route for specific chat? <Route path="/chat/:conversationId" element={<ChatPage />} /> */}
             {/* Add other protected pages here */}
           </Route>
         </Route>
