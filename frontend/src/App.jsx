@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Marketplace from './pages/MarketPlace';
 import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
           <Route element={<AppLayout />}> {/* Layout */}
             {/* Pages inside layout */}
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/market" element={<Marketplace />} /> 
             {/* Add other protected pages here */}
           </Route>
         </Route>
