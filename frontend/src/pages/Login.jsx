@@ -1,27 +1,14 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios'; // Import axios
-
-// API call function using axios
-const loginUser = async (studentId, password) => {
-  // Axios automatically handles JSON stringifying and content-type
-  // Uses the relative path '/api/login', relying on the Vite proxy
-  const response = await axios.post('/api/login', {
-    studentId,
-    password,
-  });
-  // Axios throws an error for non-2xx responses automatically
-  // Successful response data is directly in response.data
-  return response.data; // Returns { token: "...", user: { ... } }
-};
-
+import { Link, Navigate } from 'react-router-dom'; // Import Navigate
+import axios from 'axios';
+import { useAuth } from '../hooks/useAuth'; // Import the custom hook
 
 function Login() {
   const [studentId, setStudentId] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const navigate = useNavigate();
+  const [error, setError] = useState(null); // Keep local error state for the form
+  const [isLoading, setIsLoading] = useState(false); // Keep local loading state for the button
+  const { login, user } = useAuth(); // Get the login function and user from context
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -29,20 +16,17 @@ function Login() {
     setIsLoading(true);
 
     try {
-      const data = await loginUser(studentId, password);
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('userData', JSON.stringify(data.user));
-
-      console.log('Login successful:', data);
-      navigate('/dashboard');
+      // Call the login function from the context
+      await login(studentId, password);
+      // Navigation is now handled inside the context's login function
+      // No need to call navigate() here anymore
 
     } catch (err) {
-      // Handle potential Axios errors
+      // Handle potential Axios errors (same as before)
       let errorMessage = 'An error occurred during login.';
       if (axios.isAxiosError(err)) {
-        // Check if the error has a response from the server
         if (err.response && err.response.data && err.response.data.error) {
-          errorMessage = err.response.data.error; // Use backend error message
+          errorMessage = err.response.data.error;
         } else if (err.message) {
           errorMessage = err.message;
         }
@@ -51,12 +35,17 @@ function Login() {
       }
       setError(errorMessage);
       console.error('Login error:', err);
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Stop loading only on error
     }
+    // No finally block needed here if navigation happens on success
   };
 
-  // ... rest of the JSX remains the same ...
+  // If user is already logged in (e.g., they navigated back here), redirect to dashboard
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // --- JSX for the form remains largely the same ---
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md dark:bg-gray-800">
@@ -79,6 +68,7 @@ function Login() {
               onChange={(e) => setStudentId(e.target.value)}
               className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
               placeholder="e.g., 21BCE1001"
+              disabled={isLoading} // Disable input while loading
             />
           </div>
 
@@ -95,6 +85,7 @@ function Login() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
               placeholder="••••••••"
+               disabled={isLoading} // Disable input while loading
             />
           </div>
 
