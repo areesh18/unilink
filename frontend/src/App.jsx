@@ -7,6 +7,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Marketplace from './pages/MarketPlace';
+import CreateListingPage from './pages/CreateListingPage';
+import ListingDetailPage from './pages/ListingDetailPage';
 import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
@@ -23,7 +25,10 @@ function App() {
           <Route element={<AppLayout />}> {/* Layout */}
             {/* Pages inside layout */}
             <Route path="/dashboard" element={<Dashboard />} />
+            {/* Marketplace Routes */}
             <Route path="/market" element={<Marketplace />} /> 
+            <Route path="/market/new" element={<CreateListingPage />} /> 
+            <Route path="/market/:id" element={<ListingDetailPage />} />
             {/* Add other protected pages here */}
           </Route>
         </Route>
