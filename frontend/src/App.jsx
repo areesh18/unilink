@@ -24,6 +24,7 @@ import AdminAnnouncementsPage from './pages/AdminAnnouncementsPage';
 import AdminStudentListPage from './pages/AdminStudentListPage';
 import AdminMarketplacePage from './pages/AdminMarketplacePage';
 import AdminGroupManagementPage from './pages/AdminGroupManagementPage';
+import ChatPage from './pages/ChatPage'; // <-- add this import
 function App() {
   return (
     <div>
@@ -44,6 +45,9 @@ function App() {
             <Route path="/market/:id" element={<ListingDetailPage />} />
             {/* Feed Route */}
             <Route path="/feed" element={<FeedPage />} />
+            {/* Chat routes */}
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:conversationId" element={<ChatPage />} />
             {/* Friends Route */}
             <Route path="/friends" element={<Friendspage />} />
             {/* Profile Routes */}
