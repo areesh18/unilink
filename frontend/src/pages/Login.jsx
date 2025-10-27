@@ -17,7 +17,7 @@ function Login() {
 
     try {
       // Call the login function from the context
-      await login(studentId, password);
+      await login({ studentId, password });
       // Navigation is now handled inside the context's login function
       // No need to call navigate() here anymore
 
@@ -41,8 +41,12 @@ function Login() {
   };
 
   // If user is already logged in (e.g., they navigated back here), redirect to dashboard
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
+  if (user && user.role === 'student') {
+      return <Navigate to="/dashboard" replace />;
+  }
+  // Optional: Redirect if logged in as admin
+  else if (user && (user.role === 'college_admin' || user.role === 'platform_admin')) {
+      return <Navigate to="/admin/dashboard" replace />;
   }
 
   // --- JSX for the form remains largely the same ---

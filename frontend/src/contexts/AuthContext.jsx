@@ -3,7 +3,7 @@
 import React, { createContext, useState, useEffect } from 'react'; // Keep useContext import (React might optimize later)
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
+import { loginAdminApi } from '../api/admin';
 // Create the context AND EXPORT IT
 export const AuthContext = createContext(null); // <-- Add export here
 
@@ -41,13 +41,34 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = async (studentId, password) => {
-    const data = await loginUserApi(studentId, password);
+  const login = async (credentials, loginType = 'student') => {
+    let data;
+    if (loginType === 'admin') {
+      // Admin Login
+      if (!credentials.email || !credentials.password) {
+        throw new Error('Admin login requires email and password.');
+      }
+      data = await loginAdminApi(credentials.email, credentials.password);
+    } else {
+      // Student Login (default)
+      if (!credentials.studentId || !credentials.password) {
+          throw new Error('Student login requires studentId and password.');
+      }
+      data = await loginUserApi(credentials.studentId, credentials.password);
+    }
+
+    // Set state and local storage (common for both)
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem('authToken', data.token);
     localStorage.setItem('userData', JSON.stringify(data.user));
-    navigate('/dashboard');
+
+    // Navigate based on role
+    if (data.user.role === 'college_admin' || data.user.role === 'platform_admin') {
+      navigate('/admin/dashboard'); // Navigate admins to admin dashboard
+    } else {
+      navigate('/dashboard'); // Navigate students to student dashboard
+    }
   };
 
   const logout = () => {

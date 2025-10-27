@@ -13,8 +13,12 @@ import FeedPage from './pages/FeedPage';
 import Friendspage from './pages/Friendspage';
 import ProfilePage from './pages/ProfilePage';
 
-import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
+import AdminLoginPage from './pages/AdminLoginPage';
 
+import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedAdminRoute from './components/ProtectedAdminRoute'; // <-- Import Admin Protection
+import AdminLayout from './layouts/AdminLayout'; // <-- Import Admin Layout
+import AdminDashboard from './pages/AdminDashboard';
 function App() {
   return (
     <div>
@@ -23,7 +27,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         {/* Protected */}
         <Route element={<ProtectedRoute />}> {/* Authentication */}
           <Route element={<AppLayout />}> {/* Layout */}
@@ -43,6 +47,20 @@ function App() {
 
             
             {/* Add other protected pages here */}
+          </Route>
+        </Route>
+        {/* --- PROTECTED ADMIN ROUTES --- */}
+        {/* All Admin pages use the AdminLayout and are protected by role */}
+        <Route element={<ProtectedAdminRoute requiredRole="college_admin" />}>
+          <Route element={<AdminLayout />}>
+             {/* Admin Dashboard (Accessed by both College and Platform Admins) */}
+             <Route path="/admin/dashboard" element={<AdminDashboard />} />
+
+             {/* College Admin Pages (will create content for these next) */}
+             <Route path="/admin/students" element={<h1>College Student List Page</h1>} />
+             <Route path="/admin/announcements" element={<h1>College Announcements Mgt</h1>} />
+             <Route path="/admin/listings" element={<h1>College Marketplace Mgt</h1>} />
+             <Route path="/admin/groups" element={<h1>College Group Mgt</h1>} />
           </Route>
         </Route>
 
