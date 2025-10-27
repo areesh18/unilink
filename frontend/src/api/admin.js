@@ -77,4 +77,31 @@ export const fetchCollegeStudents = async () => {
         throw error.response?.data?.error || error.message || 'Failed to fetch college students';
     }
 };
+
+// Fetch all marketplace listings from the admin's college
+export const fetchCollegeListings = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/college-admin/listings
+        const response = await axios.get('/api/college-admin/listings', config);
+        // The backend returns an array of ListingResponse objects
+        return response.data || [];
+    } catch (error) {
+        console.error("Error fetching college listings:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch college listings';
+    }
+};
+
+// Delete a marketplace listing from the admin's college
+export const deleteCollegeListing = async (listingId) => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: DELETE /api/college-admin/listings/{id}
+        const response = await axios.delete(`/api/college-admin/listings/${listingId}`, config);
+        return response.data; // { message: "..." }
+    } catch (error) {
+        console.error(`Error deleting listing ${listingId}:`, error);
+        throw error.response?.data?.error || error.message || 'Failed to delete listing';
+    }
+};
 // Add other admin-related API calls here later

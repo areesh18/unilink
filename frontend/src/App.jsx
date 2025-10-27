@@ -22,6 +22,7 @@ import AdminDashboard from './pages/AdminDashboard';
 
 import AdminAnnouncementsPage from './pages/AdminAnnouncementsPage';
 import AdminStudentListPage from './pages/AdminStudentListPage';
+import AdminMarketplacePage from './pages/AdminMarketplacePage';
 function App() {
   return (
     <div>
@@ -62,7 +63,7 @@ function App() {
              {/* College Admin Pages (will create content for these next) */}
              <Route path="/admin/students" element={<AdminStudentListPage />} />
              <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
-             <Route path="/admin/listings" element={<h1>College Marketplace Mgt</h1>} />
+             <Route path="/admin/listings" element={<AdminMarketplacePage />} />
              <Route path="/admin/groups" element={<h1>College Group Mgt</h1>} />
           </Route>
         </Route>
