@@ -64,6 +64,11 @@ func seedColleges() {
 
 	colleges := []models.College{
 		{
+			CollegeCode: "PLTF_ADMIN",
+			Name:        "PLATFORM_ADMIN",
+			LogoURL:     "https://picsum.photos/200/300",
+		},
+		{
 			CollegeCode: "VIT",
 			Name:        "Vellore Institute of Technology",
 			LogoURL:     "https://upload.wikimedia.org/wikipedia/en/c/c5/Vellore_Institute_of_Technology_seal_2017.svg",
