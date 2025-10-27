@@ -104,4 +104,45 @@ export const deleteCollegeListing = async (listingId) => {
         throw error.response?.data?.error || error.message || 'Failed to delete listing';
     }
 };
+
+// Fetch all groups (auto and public) for the admin's college
+export const fetchCollegeGroups = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/college-admin/groups
+        const response = await axios.get('/api/college-admin/groups', config);
+        // Returns { total: ..., groups: [...] }
+        return response.data.groups || [];
+    } catch (error) {
+        console.error("Error fetching college groups:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch college groups';
+    }
+};
+
+// Create a new public group (club)
+export const createPublicGroup = async (groupData) => {
+    // groupData: { name, description, avatar }
+    try {
+        const config = getAuthConfig();
+        // Endpoint: POST /api/college-admin/groups
+        const response = await axios.post('/api/college-admin/groups', groupData, config);
+        return response.data; // Returns { message: "...", group: {...} }
+    } catch (error) {
+        console.error("Error creating public group:", error);
+        throw error.response?.data?.error || error.message || 'Failed to create public group';
+    }
+};
+
+// Delete a public group (cannot delete 'auto' groups)
+export const deleteCollegeGroup = async (groupId) => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: DELETE /api/college-admin/groups/{id}
+        const response = await axios.delete(`/api/college-admin/groups/${groupId}`, config);
+        return response.data; // { message: "..." }
+    } catch (error) {
+        console.error(`Error deleting group ${groupId}:`, error);
+        throw error.response?.data?.error || error.message || 'Failed to delete group';
+    }
+};
 // Add other admin-related API calls here later
