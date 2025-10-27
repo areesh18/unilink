@@ -145,4 +145,32 @@ export const deleteCollegeGroup = async (groupId) => {
         throw error.response?.data?.error || error.message || 'Failed to delete group';
     }
 };
+
+// Fetch list of all colleges (Platform Admin only) - Reuses stats endpoint data
+export const fetchAllColleges = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/platform-admin/stats (Used to get list and stats)
+        const response = await axios.get('/api/platform-admin/stats', config);
+        // The stats response includes the collegeStats array which has name and code
+        return response.data.collegeStats || []; 
+    } catch (error) {
+        console.error("Error fetching all colleges:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch college list';
+    }
+};
+
+// Add a new college (Platform Admin only)
+export const addCollege = async (collegeData) => {
+    // collegeData: { collegeCode, name, logoUrl }
+    try {
+        const config = getAuthConfig();
+        // Endpoint: POST /api/platform-admin/colleges
+        const response = await axios.post('/api/platform-admin/colleges', collegeData, config);
+        return response.data; // Returns { message: "...", college: {...} }
+    } catch (error) {
+        console.error("Error adding college:", error);
+        throw error.response?.data?.error || error.message || 'Failed to add new college';
+    }
+};
 // Add other admin-related API calls here later
