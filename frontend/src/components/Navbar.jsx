@@ -1,44 +1,152 @@
+// frontend/src/components/Navbar.jsx - FULLY RESPONSIVE
 import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth'; // Import useAuth to get user info and logout
-// Import icons if you have an icon library (e.g., react-icons)
-// import { MenuIcon, XIcon } from '@heroicons/react/outline'; // Example using Heroicons
+import { useAuth } from '../hooks/useAuth';
 
 function Navbar() {
-  const { user, logout } = useAuth(); // Get user and logout function
+  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Placeholder for navigation links - we'll expand this later
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard' },
-    { name: 'Marketplace', path: '/market' }, // Example future link
-    { name: 'Feed', path: '/feed' },           // Example future link
-    { name: 'Chat', path: '/chat' },           // Example future link
+    { name: 'Marketplace', path: '/market' },
+    { name: 'Feed', path: '/feed' },
+    { name: 'Chat', path: '/chat' },
+    { name: 'Friends', path: '/friends' },
   ];
 
   return (
-    <nav className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50">
+    <nav className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50 border-b border-gray-200 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          {/* Left side: Logo and Desktop Nav */}
-          <div className="flex items-center">
-            {/* Logo Placeholder */}
-            <Link to="/dashboard" className="shrink-0 flex items-center text-xl font-bold text-indigo-600 dark:text-indigo-400">
-              {/* You can replace this text with an <img> tag for your logo */}
+        <div className="flex justify-between items-center h-16">
+          {/* Logo */}
+          <Link 
+            to="/dashboard" 
+            className="flex items-center space-x-2 flex-shrink-0"
+          >
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">U</span>
+            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent hidden sm:block">
               UniLink
-            </Link>
+            </span>
+          </Link>
 
-            {/* Desktop Navigation Links (Hidden on small screens) */}
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-1">
+            {navLinks.map((item) => (
+              <NavLink
+                key={item.name}
+                to={item.path}
+                className={({ isActive }) =>
+                  `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  }`
+                }
+              >
+                {item.name}
+              </NavLink>
+            ))}
+          </div>
+
+          {/* Right Side - User Menu */}
+          <div className="flex items-center space-x-3">
+            {user && (
+              <>
+                {/* User Info - Hidden on mobile */}
+                <div className="hidden lg:flex items-center space-x-3">
+                  <Link 
+                    to="/profile/me"
+                    className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <img
+                      src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6366f1&color=fff`}
+                      alt={user.name}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {user.name.split(' ')[0]}
+                    </span>
+                  </Link>
+                </div>
+
+                {/* Logout Button */}
+                <button
+                  onClick={logout}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-sm hover:shadow-md active:scale-95"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Toggle menu"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                {isMobileMenuOpen ? (
+                  <path d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className="px-4 pt-2 pb-4 space-y-1">
+            {/* User Profile Link - Mobile */}
+            {user && (
+              <Link
+                to="/profile/me"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center space-x-3 px-3 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <img
+                  src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6366f1&color=fff`}
+                  alt={user.name}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    View Profile
+                  </p>
+                </div>
+              </Link>
+            )}
+
+            {/* Navigation Links */}
+            <div className="pt-2 space-y-1">
               {navLinks.map((item) => (
                 <NavLink
                   key={item.name}
                   to={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
                   className={({ isActive }) =>
-                    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    `block px-3 py-3 rounded-lg text-base font-medium transition-colors ${
                       isActive
-                        ? 'border-indigo-500 text-gray-900 dark:text-white'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white dark:hover:border-gray-700'
+                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                     }`
                   }
                 >
@@ -46,74 +154,6 @@ function Navbar() {
                 </NavLink>
               ))}
             </div>
-          </div>
-
-          {/* Right side: User Menu and Mobile Menu Button */}
-          <div className="flex items-center">
-            {/* User Info & Logout Button */}
-            {user ? (
-              <div className="flex items-center space-x-3">
-                 <span className="hidden sm:inline text-sm text-gray-700 dark:text-gray-300">
-                  Hi, {user.name.split(' ')[0]} {/* Display first name */}
-                </span>
-                <button
-                  onClick={logout}
-                  className="px-3 py-1 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-                // Optional: Show Login/Register links if implementing a public navbar later
-                 <Link to="/login" className="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white">Login</Link>
-            )}
-
-            {/* Mobile Menu Button (Hidden on larger screens) */}
-            <div className="ml-4 flex items-center sm:hidden">
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 dark:hover:bg-gray-700 dark:hover:text-white"
-              >
-                <span className="sr-only">Open main menu</span>
-                {/* Basic hamburger/close icons using divs (replace with actual icons) */}
-                {isMobileMenuOpen ? (
-                   <div className="block h-6 w-6" aria-hidden="true"> {/* Basic X icon */}
-                        <div className="absolute h-0.5 w-5 bg-current transform rotate-45"></div>
-                        <div className="absolute h-0.5 w-5 bg-current transform -rotate-45"></div>
-                   </div>
-                ) : (
-                  <div className="block h-6 w-6" aria-hidden="true"> {/* Basic Hamburger icon */}
-                    <div className="h-0.5 w-5 bg-current mb-1"></div>
-                    <div className="h-0.5 w-5 bg-current mb-1"></div>
-                    <div className="h-0.5 w-5 bg-current"></div>
-                  </div>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Menu Dropdown (Conditionally Rendered) */}
-      {isMobileMenuOpen && (
-        <div className="sm:hidden border-t border-gray-200 dark:border-gray-700">
-          <div className="pt-2 pb-3 space-y-1">
-            {navLinks.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.path}
-                 onClick={() => setIsMobileMenuOpen(false)} // Close menu on click
-                 className={({ isActive }) =>
-                  `block pl-3 pr-4 py-2 border-l-4 text-base font-medium ${
-                    isActive
-                      ? 'bg-indigo-50 border-indigo-500 text-indigo-700 dark:bg-gray-900 dark:border-indigo-400 dark:text-indigo-400'
-                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white'
-                  }`
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
           </div>
         </div>
       )}
