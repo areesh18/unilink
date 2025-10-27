@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Marketplace from './pages/MarketPlace';
 import CreateListingPage from './pages/CreateListingPage';
 import ListingDetailPage from './pages/ListingDetailPage';
+import FeedPage from './pages/FeedPage';
 import ProtectedRoute from './components/ProtectedRoute'; // <-- Import protected route
 
 function App() {
@@ -29,6 +30,8 @@ function App() {
             <Route path="/market" element={<Marketplace />} /> 
             <Route path="/market/new" element={<CreateListingPage />} /> 
             <Route path="/market/:id" element={<ListingDetailPage />} />
+            {/* Feed Route */}
+            <Route path="/feed" element={<FeedPage />} />
             {/* Add other protected pages here */}
           </Route>
         </Route>
