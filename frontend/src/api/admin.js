@@ -145,7 +145,7 @@ export const deleteCollegeGroup = async (groupId) => {
         throw error.response?.data?.error || error.message || 'Failed to delete group';
     }
 };
-
+/* ------------------------------------------------------------------------------------------------- */
 // Fetch list of all colleges (Platform Admin only) - Reuses stats endpoint data
 export const fetchAllColleges = async () => {
     try {
@@ -173,4 +173,46 @@ export const addCollege = async (collegeData) => {
         throw error.response?.data?.error || error.message || 'Failed to add new college';
     }
 };
+
+// Fetch platform-wide statistics (Platform Admin only)
+export const fetchPlatformStats = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/platform-admin/stats
+        const response = await axios.get('/api/platform-admin/stats', config);
+        // Returns { totalColleges, totalStudents, totalListings, collegeStats: [...] }
+        return response.data; 
+    } catch (error) {
+        console.error("Error fetching platform stats:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch platform statistics';
+    }
+};
+
+
+
+// Create a new college admin (Platform Admin only)
+export const createCollegeAdmin = async (adminData) => {
+    // adminData: { name, email, password, collegeCode }
+    try {
+        const config = getAuthConfig();
+        // Endpoint: POST /api/platform-admin/college-admins
+        const response = await axios.post('/api/platform-admin/college-admins', adminData, config);
+        return response.data; // Returns { message: "...", user: {...} }
+    } catch (error) {
+        console.error("Error creating college admin:", error);
+        throw error.response?.data?.error || error.message || 'Failed to create college admin';
+    }
+};
 // Add other admin-related API calls here later
+export const fetchCollegeStats = async () => {
+    try {
+        const config = getAuthConfig();
+        // Endpoint: GET /api/college-admin/stats
+        const response = await axios.get('/api/college-admin/stats', config);
+        // Returns { collegeId, collegeCode, collegeName, totalStudents, totalListings, activeListings }
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching college stats:", error);
+        throw error.response?.data?.error || error.message || 'Failed to fetch college statistics';
+    }
+};

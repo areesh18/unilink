@@ -25,6 +25,8 @@ import AdminStudentListPage from "./pages/AdminStudentListPage";
 import AdminMarketplacePage from "./pages/AdminMarketplacePage";
 import AdminGroupManagementPage from "./pages/AdminGroupManagementPage";
 import PlatformCollegeManagementPage from "./pages/PlatformCollegeManagementPage";
+import PlatformStatsPage from "./pages/PlatformStatsPage";
+import PlatformAdminManagementPage from "./pages/PlatformAdminManagementPage";
 import ChatPage from "./pages/ChatPage"; // <-- add this import
 function App() {
   return (
@@ -84,8 +86,7 @@ function App() {
         {/* --- PROTECTED PLATFORM ADMIN ROUTES (Only accessible by Platform Admin) --- */}
         <Route element={<ProtectedAdminRoute requiredRole="platform_admin" />}>
           <Route element={<AdminLayout />}>
-            {/* <Route path="/platform/stats" element={h1} /> */}
-
+            <Route path="/platform/stats" element={<PlatformStatsPage />} />
             <Route
               path="/platform/colleges"
               element={<PlatformCollegeManagementPage />}
@@ -93,7 +94,7 @@ function App() {
 
             <Route
               path="/platform/admins"
-              element={<h1>Platform Admin Creation</h1>}
+              element={<PlatformAdminManagementPage />}
             />
           </Route>
         </Route>

@@ -1,4 +1,4 @@
-// frontend/src/components/Navbar.jsx - FULLY RESPONSIVE
+// frontend/src/components/Navbar.jsx - FULLY RESPONSIVE & ADMIN-AWARE
 import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -6,6 +6,11 @@ import { useAuth } from '../hooks/useAuth';
 function Navbar() {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // --- ROLE CHECKS ---
+  const isStudent = user && user.role === 'student';
+  const isAdmin = user && (user.role === 'college_admin' || user.role === 'platform_admin');
+  // --- END ROLE CHECKS ---
 
   const navLinks = [
     { name: 'Dashboard', path: '/dashboard' },
@@ -15,13 +20,16 @@ function Navbar() {
     { name: 'Friends', path: '/friends' },
   ];
 
+  // Determine the correct dashboard link for the logo
+  const homeLink = isStudent ? "/dashboard" : (isAdmin ? "/admin/dashboard" : "/");
+
   return (
     <nav className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50 border-b border-gray-200 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link 
-            to="/dashboard" 
+            to={homeLink} // <-- Use dynamic home link
             className="flex items-center space-x-2 flex-shrink-0"
           >
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
@@ -32,30 +40,35 @@ function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-1">
-            {navLinks.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.path}
-                className={({ isActive }) =>
-                  `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
-                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                  }`
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
-          </div>
+          {/* Desktop Navigation (Students Only) */}
+          {/* --- WRAP IN ROLE CHECK --- */}
+          {isStudent && (
+            <div className="hidden md:flex items-center space-x-1">
+              {navLinks.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                    }`
+                  }
+                >
+                  {item.name}
+                </NavLink>
+              ))}
+            </div>
+          )}
+          {/* --- END WRAPPER --- */}
+
 
           {/* Right Side - User Menu */}
           <div className="flex items-center space-x-3">
             {user && (
               <>
-                {/* User Info - Hidden on mobile */}
+                {/* User Info - Hidden on mobile (Works for Admins too) */}
                 <div className="hidden lg:flex items-center space-x-3">
                   <Link 
                     to="/profile/me"
@@ -72,7 +85,7 @@ function Navbar() {
                   </Link>
                 </div>
 
-                {/* Logout Button */}
+                {/* Logout Button (Works for Admins too) */}
                 <button
                   onClick={logout}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-sm hover:shadow-md active:scale-95"
@@ -82,34 +95,40 @@ function Navbar() {
               </>
             )}
 
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
-              aria-label="Toggle menu"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            {/* Mobile Menu Button (Students Only) */}
+            {/* --- WRAP IN ROLE CHECK --- */}
+            {isStudent && (
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Toggle menu"
               >
-                {isMobileMenuOpen ? (
-                  <path d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  {isMobileMenuOpen ? (
+                    <path d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+            )}
+            {/* --- END WRAPPER --- */}
+
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
+      {/* Mobile Menu (Students Only) */}
+      {/* --- WRAP IN ROLE CHECK --- */}
+      {isStudent && isMobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="px-4 pt-2 pb-4 space-y-1">
             {/* User Profile Link - Mobile */}
@@ -157,6 +176,8 @@ function Navbar() {
           </div>
         </div>
       )}
+      {/* --- END WRAPPER --- */}
+
     </nav>
   );
 }
