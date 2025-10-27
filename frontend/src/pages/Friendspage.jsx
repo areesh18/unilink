@@ -9,7 +9,7 @@ import {
   removeFriend,
   sendFriendRequest,
 } from "../api/friends"; // Import API functions
-
+import { useAuth } from "../hooks/useAuth";
 // Reusable component for displaying a user profile summary
 const UserCard = ({ user, children }) => (
   <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-md shadow-sm">
@@ -60,6 +60,7 @@ function FriendsPage() {
   });
   const [actionLoading, setActionLoading] = useState({}); // Track loading state for specific buttons
   const [sentRequests, setSentRequests] = useState(new Set());
+  const { user } = useAuth(); // GET CURRENT USER
 
   // Function to load all data
   const loadAllData = useCallback(async () => {
@@ -217,6 +218,17 @@ function FriendsPage() {
         error.friends,
         (friend) => (
           <UserCard key={friend.id} user={friend}>
+            {/* NEW MESSAGE BUTTON */}
+            <Link
+              to={`/chat/dm_${Math.min(user.id, friend.id)}_${Math.max(
+                user.id,
+                friend.id
+              )}`}
+              className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700"
+              title="Send message"
+            >
+              Message
+            </Link>
             <button
               onClick={() => handleRemove(friend.id)}
               disabled={actionLoading[`remove-${friend.id}`]}
@@ -224,38 +236,44 @@ function FriendsPage() {
             >
               {actionLoading[`remove-${friend.id}`] ? "..." : "Remove"}
             </button>
-            {/* Optional: Add Chat Button */}
-            {/* <Link to={`/chat/dm_${friend.id}`} className="...">Chat</Link> */}
           </UserCard>
         )
       )}
 
       {/* Friend Suggestions Section */}
-      {renderSection("Suggestions", suggestions, loading.suggestions, error.suggestions, (suggestion) => {
-                // Check if a request has been sent to this suggestion
-                const hasSentRequest = sentRequests.has(suggestion.id);
+      {renderSection(
+        "Suggestions",
+        suggestions,
+        loading.suggestions,
+        error.suggestions,
+        (suggestion) => {
+          // Check if a request has been sent to this suggestion
+          const hasSentRequest = sentRequests.has(suggestion.id);
 
-                return (
-                    <UserCard key={suggestion.id} user={suggestion}>
-                        <button
-                            onClick={() => handleAddFriend(suggestion.id)}
-                            // Disable if request sent OR if action is loading
-                            disabled={actionLoading[`add-${suggestion.id}`] || hasSentRequest}
-                            className={`px-3 py-1 text-xs font-medium text-white rounded disabled:opacity-50 ${
-                                hasSentRequest
-                                    ? 'bg-gray-400 cursor-not-allowed' // Style for pending/sent
-                                    : 'bg-indigo-600 hover:bg-indigo-700' // Style for add
-                            }`}
-                        >
-                            {actionLoading[`add-${suggestion.id}`]
-                                ? '...'
-                                : hasSentRequest
-                                ? 'Pending' // Change text after sending
-                                : 'Add Friend'}
-                        </button>
-                    </UserCard>
-                );
-            })}
+          return (
+            <UserCard key={suggestion.id} user={suggestion}>
+              <button
+                onClick={() => handleAddFriend(suggestion.id)}
+                // Disable if request sent OR if action is loading
+                disabled={
+                  actionLoading[`add-${suggestion.id}`] || hasSentRequest
+                }
+                className={`px-3 py-1 text-xs font-medium text-white rounded disabled:opacity-50 ${
+                  hasSentRequest
+                    ? "bg-gray-400 cursor-not-allowed" // Style for pending/sent
+                    : "bg-indigo-600 hover:bg-indigo-700" // Style for add
+                }`}
+              >
+                {actionLoading[`add-${suggestion.id}`]
+                  ? "..."
+                  : hasSentRequest
+                  ? "Pending" // Change text after sending
+                  : "Add Friend"}
+              </button>
+            </UserCard>
+          );
+        }
+      )}
     </div>
   );
 }
