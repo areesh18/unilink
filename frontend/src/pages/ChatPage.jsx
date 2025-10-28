@@ -1,4 +1,4 @@
-// frontend/src/pages/ChatPage.jsx - COMPLETE IMPLEMENTATION (with duplicate fix v5 - Filter Logic)
+// frontend/src/pages/ChatPage.jsx - Refactored for Light Mode
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -9,11 +9,23 @@ import {
 } from "../api/messages";
 import { useAuth } from "../hooks/useAuth";
 import NewChatModal from "../components/NewChatModal";
+import {
+  ChatBubbleLeftRightIcon, // For mobile toggle
+  XMarkIcon,               // For mobile toggle close
+  PaperAirplaneIcon,       // For send button
+  PlusIcon,                // For New Chat button
+  ChatBubbleBottomCenterTextIcon, // Empty state icon
+  QuestionMarkCircleIcon, // Not found icon
+  ExclamationTriangleIcon // Error icon (though not used in EmptyState directly)
+} from '@heroicons/react/24/outline';
+import { TrashIcon } from '@heroicons/react/20/solid'; // Solid icon for delete
+
 
 // ===========================
 // HELPER FUNCTIONS
 // ===========================
 
+// formatTime remains the same
 const formatTime = (dateString) => {
   try {
     const date = new Date(dateString);
@@ -36,6 +48,7 @@ const formatTime = (dateString) => {
   }
 };
 
+// fallbackAvatar remains the same
 const fallbackAvatar = (name) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(
     name || 'User'
@@ -45,108 +58,120 @@ const fallbackAvatar = (name) =>
 // SUB-COMPONENTS
 // ===========================
 
+// ConversationItem - Updated Light Mode Styles
 const ConversationItem = ({ conversation, isActive, onClick }) => (
     <div
       onClick={onClick}
-      className={`flex items-center p-3 cursor-pointer transition-all duration-200 border-b border-gray-100 dark:border-gray-700 ${
+      // Adjusted borders, background colors, hover effect
+      className={`flex items-center p-3 cursor-pointer transition-colors duration-150 border-b border-gray-100 ${
         isActive
-          ? "bg-indigo-50 dark:bg-indigo-900/30 border-l-4 border-indigo-600"
-          : "hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 border-transparent"
+          ? "bg-indigo-50 border-l-4 border-indigo-500" // Active state with indigo accent
+          : "hover:bg-gray-50 border-l-4 border-transparent" // Hover state
       }`}
     >
       <div className="relative flex-shrink-0">
         <img
           src={conversation.avatar || fallbackAvatar(conversation.name)}
           alt={conversation.name}
-          className="h-12 w-12 rounded-full object-cover"
+          className="h-11 w-11 rounded-full object-cover border border-gray-200" // Added border
           onError={(e) => { e.target.src = fallbackAvatar(conversation.name); }}
         />
+        {/* Unread count styling remains similar */}
         {conversation.unreadCount > 0 && (
-          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold shadow-lg">
+          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold shadow-sm">
             {conversation.unreadCount > 9 ? "9+" : conversation.unreadCount}
           </div>
         )}
       </div>
       <div className="flex-1 min-w-0 ml-3">
         <div className="flex justify-between items-baseline">
-          <h3 className={`text-sm font-semibold truncate ${ conversation.unreadCount > 0 ? "text-gray-900 dark:text-white" : "text-gray-700 dark:text-gray-300" }`}>
+          {/* Adjusted text colors for unread/read */}
+          <h3 className={`text-sm font-semibold truncate ${ conversation.unreadCount > 0 ? "text-gray-900" : "text-gray-700" }`}>
             {conversation.name}
           </h3>
-          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">
+          <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
             {formatTime(conversation.lastMessageTime)}
           </span>
         </div>
-        <p className={`text-sm truncate ${ conversation.unreadCount > 0 ? "text-gray-900 dark:text-white font-medium" : "text-gray-500 dark:text-gray-400" }`}>
-          {conversation.lastMessage || "No messages yet"}
+        <p className={`text-sm truncate ${ conversation.unreadCount > 0 ? "text-gray-800 font-medium" : "text-gray-500" }`}>
+          {conversation.lastMessage || <span className="italic">No messages yet</span>}
         </p>
       </div>
     </div>
   );
 
+// MessageBubble - Updated Light Mode Styles
 const MessageBubble = ({ message, isOwn, onDelete, showAvatar = true }) => (
-    <div className={`flex mb-4 ${isOwn ? "justify-end" : "justify-start"} group`}>
+    <div className={`flex mb-3 ${isOwn ? "justify-end" : "justify-start"} group`}>
+      {/* Sender Avatar (Left) */}
       {!isOwn && showAvatar && message.sender && (
         <img
           src={ message.sender.profilePicture || fallbackAvatar(message.sender.name) }
           alt={message.sender.name}
-          className="h-8 w-8 rounded-full object-cover mr-2 flex-shrink-0"
+          className="h-8 w-8 rounded-full object-cover mr-2 flex-shrink-0 border border-gray-200" // Added border
           onError={(e) => { e.target.src = fallbackAvatar(message.sender.name); }}
         />
       )}
-      {!isOwn && !showAvatar && <div className="w-8 mr-2 flex-shrink-0" />}
+      {!isOwn && !showAvatar && <div className="w-8 mr-2 flex-shrink-0" />} {/* Placeholder for alignment */}
 
-      <div className={`max-w-xs lg:max-w-md ${ isOwn ? "items-end" : "items-start" } flex flex-col`}>
+      {/* Message Content */}
+      <div className={`max-w-[70%] sm:max-w-[60%] ${ isOwn ? "items-end" : "items-start" } flex flex-col`}>
+        {/* Sender Name (Above bubble for others) */}
         {!isOwn && showAvatar && message.sender && (
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 px-2">
+          <p className="text-xs text-gray-500 mb-0.5 px-2">
             {message.sender.name}
           </p>
         )}
-        <div className={`px-4 py-2 rounded-2xl shadow-sm ${ isOwn ? "bg-indigo-600 text-white rounded-br-sm" : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-sm" }`}>
-          <p className="text-sm whitespace-pre-wrap break-words">
+        {/* Bubble Styling */}
+        <div className={`px-3 py-2 rounded-lg shadow-sm text-sm ${
+              isOwn
+                ? "bg-indigo-600 text-white rounded-br-none" // Own message style
+                : "bg-white text-gray-800 border border-gray-200 rounded-bl-none" // Other message style
+            }`}>
+          <p className="whitespace-pre-wrap break-words">
             {message.content}
           </p>
         </div>
+        {/* Timestamp and Delete Button */}
         <div className="flex items-center gap-2 mt-1 px-2">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-400">
             {formatTime(message.createdAt)}
           </span>
-          {isOwn && message.id && typeof message.id !== 'string' && ( // Check ID is not string (i.e., not temp)
+          {isOwn && message.id && typeof message.id !== 'string' && (
             <button
               onClick={() => onDelete(message.id)}
-              className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="text-xs text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center"
               title="Delete message"
             >
-              Delete
+              <TrashIcon className="w-3 h-3 mr-0.5"/> Delete
             </button>
           )}
         </div>
       </div>
 
-      {isOwn && showAvatar && message.sender && (
-        <img
-          src={message.sender.profilePicture || fallbackAvatar("You")}
-          alt="You"
-          className="h-8 w-8 rounded-full object-cover ml-2 flex-shrink-0"
-          onError={(e) => { e.target.src = fallbackAvatar("You"); }}
-        />
-      )}
-      {isOwn && !showAvatar && <div className="w-8 ml-2 flex-shrink-0" />}
+      {/* Own Avatar (Right) - Hidden for now to simplify, can be re-added if needed */}
+      {/* {isOwn && showAvatar && message.sender && ( ... )} */}
+      {/* {isOwn && !showAvatar && <div className="w-8 ml-2 flex-shrink-0" />} */}
     </div>
   );
 
-const EmptyState = ({ icon, title, description }) => (
-    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 p-8 text-center">
-      <div className="text-6xl mb-4">{icon}</div>
-      <h3 className="text-xl font-semibold mb-2 text-gray-700 dark:text-gray-300">
+
+// EmptyState - Updated Light Mode Styles & Icons
+const EmptyState = ({ icon: IconComponent, title, description }) => (
+    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
+      <IconComponent className="w-16 h-16 text-gray-300 mb-4" strokeWidth={1} />
+      <h3 className="text-lg font-semibold mb-1 text-gray-700">
         {title}
       </h3>
-      <p className="text-sm max-w-md">{description}</p>
+      <p className="text-sm max-w-sm">{description}</p>
     </div>
   );
 
+
+// LoadingSpinner - Adjusted Border Color
 const LoadingSpinner = () => (
-    <div className="flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    <div className="flex items-center justify-center p-4">
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
     </div>
   );
 
@@ -159,7 +184,7 @@ function ChatPage() {
   const navigate = useNavigate();
   const { user, addWsMessageListener } = useAuth();
 
-  // State
+  // State remains the same
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -170,16 +195,13 @@ function ChatPage() {
   const [error, setError] = useState({ conversations: null, messages: null });
   const [sending, setSending] = useState(false);
 
-  // Refs
+  // Refs remain the same
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
 
-  // ===========================
-  // HELPER FUNCTIONS
-  // ===========================
-
+  // Helper Functions remain the same
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); // Smooth scroll back
+     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const groupMessages = useCallback((msgs = []) => {
@@ -188,7 +210,7 @@ function ChatPage() {
     let lastSenderId = null;
     msgs.forEach((msg) => {
       const currentSenderId = msg?.sender?.id;
-      if (!msg || currentSenderId !== lastSenderId || !currentSenderId) { // Check msg exists
+      if (!msg || currentSenderId !== lastSenderId || !currentSenderId) {
         if (currentGroup.length > 0) grouped.push([...currentGroup]);
         currentGroup = msg ? [{ ...msg, showAvatar: true }] : [];
         lastSenderId = currentSenderId;
@@ -200,12 +222,8 @@ function ChatPage() {
     return grouped.flat();
   }, []);
 
-  // ===========================
-  // EFFECTS
-  // ===========================
-
-   // Load conversations
-   useEffect(() => {
+  // Effects remain the same (logic unchanged)
+  useEffect(() => {
      let isMounted = true;
      const loadConversations = async () => {
        if (isMounted) setLoading((prev) => ({ ...prev, conversations: true }));
@@ -221,34 +239,29 @@ function ChatPage() {
      };
      loadConversations();
      return () => { isMounted = false; };
-   }, [navigate]); // Only trigger once
+  }, [navigate]);
 
-
-   // Load messages & Set Current Conversation / Auto-select first
-   useEffect(() => {
+  useEffect(() => {
       let isMounted = true;
-      if (loading.conversations) return; // Wait until conversations are loaded
+      if (loading.conversations) return;
 
       if (!conversationId) {
-         // Auto-select first conversation if URL has no ID
          if (conversations.length > 0) {
             navigate(`/chat/${conversations[0].conversationId}`, { replace: true });
          } else {
-            // No conversations exist yet
              if (isMounted) {
                 setCurrentConversation(null);
                 setMessages([]);
-                setLoading(prev => ({ ...prev, messages: false })); // Stop messages loading
+                setLoading(prev => ({ ...prev, messages: false }));
              }
          }
          return;
       };
 
-      // Find current conv details now that conversations are loaded
       const currentConvData = conversations.find(c => c.conversationId === conversationId);
       if (isMounted) {
          setCurrentConversation(currentConvData || null);
-         setIsMobileMenuOpen(false); // Close mobile menu
+         setIsMobileMenuOpen(false);
       }
 
       if (currentConvData) {
@@ -271,19 +284,16 @@ function ChatPage() {
           };
           loadMessages();
       } else {
-          // ConversationId in URL not found in list
           if (isMounted) {
              setMessages([]);
-             setCurrentConversation(null); // Explicitly clear current conversation
+             setCurrentConversation(null);
              setError(prev => ({ ...prev, messages: "Conversation not found."}));
              setLoading(prev => ({...prev, messages: false}));
           }
       }
       return () => { isMounted = false; };
-   }, [conversationId, conversations, loading.conversations, navigate]);
+  }, [conversationId, conversations, loading.conversations, navigate]);
 
-
-  // Auto-scroll effect
   useEffect(() => {
     if (!loading.messages) {
       const timer = setTimeout(() => { scrollToBottom(); }, 100);
@@ -291,69 +301,36 @@ function ChatPage() {
     }
   }, [messages, loading.messages, scrollToBottom]);
 
-
-  // --- WebSocket Listener (v4 - Filter/Add Logic with Type Safety) ---
   useEffect(() => {
-    if (!addWsMessageListener || !user) {
-      console.log("WS Listener: Waiting for context or user...");
-      return;
-    }
-
-    console.log(`WS Listener: Subscribing for conversation ${conversationId}`);
+    if (!addWsMessageListener || !user) return;
 
     const removeListener = addWsMessageListener((message) => {
-      if (!message || message.type !== 'newMessage' || !message.payload || typeof message.payload.id === 'undefined' || !message.payload.sender) {
-           console.warn("WS Listener: Received invalid message structure", message);
-           return;
-      }
+      if (!message || message.type !== 'newMessage' || !message.payload || typeof message.payload.id === 'undefined' || !message.payload.sender) return;
 
       if (message.payload.conversationId === conversationId) {
         const realMessage = message.payload;
-        console.log(`ChatPage received matching WS message (ID: ${realMessage.id}):`, realMessage);
-
         setMessages((prevMessages) => {
-          // Check if the REAL message (by its final ID, ensuring it's not a string) already exists
           const realMessageExists = prevMessages.some(m => m.id === realMessage.id && typeof m.id !== 'string');
-          if (realMessageExists) {
-            console.log(`WS Listener: Real message ${realMessage.id} already exists, skipping.`);
-            return prevMessages;
-          }
+          if (realMessageExists) return prevMessages;
 
-          // Filter out the corresponding optimistic message
-          let optimisticRemoved = false;
           const filteredMessages = prevMessages.filter(msg => {
-            // Check if msg.id exists and is a string before calling startsWith
             const isOptimisticMatch = (
               msg.id && typeof msg.id === 'string' && msg.id.startsWith('temp-') &&
               msg.content === realMessage.content &&
               msg.sender?.id === realMessage.sender?.id
             );
-            if (isOptimisticMatch) {
-                console.log(`WS Listener: Filtering out optimistic message ${msg.id}`);
-                optimisticRemoved = true;
-            }
-            // Keep the message if it's NOT the optimistic one to remove
             return !isOptimisticMatch;
           });
-
-          // Add the REAL message to the filtered list
-          console.log(`WS Listener: Adding real message ${realMessage.id}. Optimistic removed: ${optimisticRemoved}`);
           return [...filteredMessages, realMessage];
         });
       }
     });
 
-    return () => {
-      console.log("ChatPage removing WS listener for:", conversationId);
-      removeListener();
-    };
+    return () => removeListener();
   }, [addWsMessageListener, conversationId, user]);
-  // --- End WebSocket Listener ---
 
-  // ===========================
-  // EVENT HANDLERS
-  // ===========================
 
+  // Event Handlers remain the same (logic unchanged)
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageInput.trim() || !currentConversation || !user) return;
@@ -386,19 +363,18 @@ function ChatPage() {
       } else if (currentConversation.conversationType === "group" && currentConversation.groupInfo) {
         messageData.groupId = currentConversation.groupInfo.id;
       }
-      await sendMessage(messageData); // API call - WS listener handles adding/replacing
+      await sendMessage(messageData);
     } catch (err) {
       alert(`Failed to send message: ${err}`);
       console.error("Send message error:", err);
-      setMessages((prev) => prev.filter(msg => msg.id !== tempId)); // Remove optimistic on error
-      setMessageInput(messageToSend); // Restore input
+      setMessages((prev) => prev.filter(msg => msg.id !== tempId));
+      setMessageInput(messageToSend);
     } finally {
       setSending(false);
     }
   };
 
   const handleDeleteMessage = async (messageId) => {
-    // Prevent deleting optimistic or invalid IDs
     if (!messageId || typeof messageId === 'string') return;
     if (!window.confirm("Delete this message?")) return;
     try {
@@ -419,54 +395,54 @@ function ChatPage() {
     setIsMobileMenuOpen(false);
   };
 
-  // ===========================
-  // RENDER
-  // ===========================
-
+  // Render Logic
   const groupedDisplayMessages = groupMessages(messages);
 
   return (
     <>
+      {/* NewChatModal remains unchanged */}
       <NewChatModal
         isOpen={isNewChatModalOpen}
         onClose={() => setIsNewChatModalOpen(false)}
       />
 
-      <div className="flex h-[calc(100vh-8rem)] bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-        {/* Mobile Menu Toggle Button */}
+      {/* Main Container - Updated Styles */}
+      <div className="flex h-[calc(100vh-6rem)] md:h-[calc(100vh-7rem)] bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+        {/* Mobile Menu Toggle Button - Updated Styles & Icon */}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="md:hidden fixed bottom-4 right-4 z-50 bg-indigo-600 text-white p-4 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
+          className="md:hidden fixed bottom-5 right-5 z-50 bg-indigo-600 text-white p-3 rounded-full shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-150"
           aria-label="Toggle chat menu"
         >
-          {isMobileMenuOpen ? "✕" : "💬"}
+          {isMobileMenuOpen ? <XMarkIcon className="w-6 h-6"/> : <ChatBubbleLeftRightIcon className="w-6 h-6"/>}
         </button>
 
-        {/* Conversations Sidebar */}
+        {/* Conversations Sidebar - Updated Styles */}
         <div
           className={`${
-            isMobileMenuOpen ? "fixed inset-0 z-40" : "hidden"
-          } md:relative md:flex w-full md:w-80 border-r border-gray-200 dark:border-gray-700 flex-col bg-white dark:bg-gray-800`}
+            isMobileMenuOpen ? "fixed inset-0 z-40" : "hidden" // Keep mobile overlay behavior
+          } md:relative md:flex w-full md:w-80 border-r border-gray-200 flex-col bg-white`} // Light bg, border
         >
-          {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          {/* Sidebar Header - Updated Styles */}
+          <div className="p-4 border-b border-gray-200">
              <div className="flex items-center justify-between mb-3">
-               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Messages</h2>
+               <h2 className="text-lg font-semibold text-gray-800">Messages</h2>
              </div>
+             {/* New Chat Button - Updated Styles & Icon */}
              <button
                 onClick={() => setIsNewChatModalOpen(true)}
-                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 transition-colors duration-150 text-sm font-medium flex items-center justify-center gap-1.5"
              >
-                <span className="text-lg">+</span> New Chat
+                <PlusIcon className="w-4 h-4" strokeWidth={3}/> New Chat
              </button>
           </div>
 
-          {/* Conversations List */}
+          {/* Conversations List - Adjusted Styles */}
           <div className="flex-1 overflow-y-auto">
-             {loading.conversations && <div className="p-4 text-center"><LoadingSpinner /></div>}
-             {error.conversations && <div className="p-4 m-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded text-sm">Error: {error.conversations}</div>}
+             {loading.conversations && <LoadingSpinner />}
+             {error.conversations && <div className="p-3 m-2 bg-red-50 text-red-600 rounded text-xs text-center">Error: {error.conversations}</div>}
              {!loading.conversations && conversations.length === 0 && (
-                <div className="p-4 text-center text-gray-500 dark:text-gray-400">No conversations yet.</div>
+                <div className="p-4 text-center text-sm text-gray-500">No conversations yet.</div>
              )}
              {!loading.conversations && conversations.map((conv) => (
                 <ConversationItem
@@ -479,60 +455,78 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* Messages Area */}
-        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900">
-          {/* Conditional Rendering based on state */}
+        {/* Messages Area - Updated Background */}
+        <div className="flex-1 flex flex-col bg-gray-50">
+          {/* Conditional Rendering using updated EmptyState */}
           {!conversationId && !loading.conversations ? (
-            <EmptyState icon="👈" title="Select a Conversation" description="Choose a chat from the left panel." />
-           ) : loading.conversations && !currentConversation ? (
+            <EmptyState icon={ChatBubbleBottomCenterTextIcon} title="Select a Conversation" description="Choose a chat from the left panel to view messages." />
+           ) : loading.conversations && !currentConversation ? ( // Loading conv list initially
              <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>
-           ) : !currentConversation && !loading.conversations ? (
-            <EmptyState icon="❓" title="Conversation Not Found" description="Select a valid conversation." />
-           ) : ( // We have a valid conversationId and potentially a currentConversation object
+           ) : !currentConversation && !loading.conversations && conversationId ? ( // Conv ID in URL but not found
+            <EmptyState icon={QuestionMarkCircleIcon} title="Conversation Not Found" description="This conversation doesn't exist or you don't have access." />
+           ) : ( // We have a valid conversationId
              <>
-               {/* Chat Header (Render only when currentConversation is loaded) */}
+               {/* Chat Header - Updated Styles */}
                {currentConversation && (
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10">
-                   <img src={currentConversation.avatar || fallbackAvatar(currentConversation.name)} alt={currentConversation.name} className="h-10 w-10 rounded-full object-cover mr-3"/>
+                 <div className="p-3 border-b border-gray-200 flex items-center bg-white shadow-sm sticky top-0 z-10 h-16">
+                   <img src={currentConversation.avatar || fallbackAvatar(currentConversation.name)} alt={currentConversation.name} className="h-9 w-9 rounded-full object-cover mr-3 border border-gray-200"/>
                    <div className="flex-1 min-w-0">
-                     <h3 className="font-semibold text-gray-900 dark:text-white truncate">{currentConversation.name}</h3>
-                     <p className="text-xs text-gray-500 dark:text-gray-400">{currentConversation.conversationType === 'dm' ? 'Direct Message' : 'Group Chat'}</p>
+                     <h3 className="font-semibold text-sm text-gray-800 truncate">{currentConversation.name}</h3>
+                     <p className="text-xs text-gray-500">{currentConversation.conversationType === 'dm' ? 'Direct Message' : 'Group Chat'}</p>
                    </div>
+                   {/* Add Actions like search, info later if needed */}
                  </div>
                )}
 
-               {/* Messages Display Area */}
+               {/* Messages Display Area - Updated Padding */}
                <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                 {loading.messages && messages.length === 0 ? ( // Show loading only when empty and loading
+                 {loading.messages && messages.length === 0 ? (
                    <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>
                  ) : error.messages ? (
-                   <div className="p-4 m-4 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded text-sm text-center">Error: {error.messages}</div>
-                 ) : messages.length === 0 && !loading.messages ? ( // Show empty only when not loading and empty
-                   <EmptyState icon="👋" title="Start Chatting!" description="Send the first message." />
+                   <div className="p-3 m-2 bg-red-50 text-red-600 rounded text-xs text-center">Error loading messages: {error.messages}</div>
+                 ) : messages.length === 0 && !loading.messages ? (
+                   <EmptyState icon={ChatBubbleBottomCenterTextIcon} title="Start Chatting!" description={`Send the first message to ${currentConversation?.name || 'this chat'}.`} />
                  ) : (
                    <>
-                     {/* Render messages */}
+                     {/* Render messages with updated MessageBubble */}
                      {groupedDisplayMessages.map((msg) => (
                        <MessageBubble
-                         key={msg.id && typeof msg.id === 'string' && msg.id.startsWith('temp-') ? msg.id : `${msg.id}-${msg.createdAt}`} // Robust key
+                         key={msg.id && typeof msg.id === 'string' && msg.id.startsWith('temp-') ? msg.id : `${msg.id}-${msg.createdAt}`}
                          message={msg}
                          isOwn={msg.sender?.id === user?.id}
                          onDelete={handleDeleteMessage}
                          showAvatar={msg.showAvatar}
                        />
                      ))}
-                     <div ref={messagesEndRef} />
+                     <div ref={messagesEndRef} className="h-1"/> {/* Scroll anchor */}
                    </>
                  )}
                </div>
 
-               {/* Message Input Form (Render only if currentConversation exists) */}
+               {/* Message Input Form - Updated Styles */}
                {currentConversation && (
-                 <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                   <div className="flex space-x-2">
-                     <input ref={messageInputRef} type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Type a message..." disabled={sending || (loading.messages && messages.length === 0) || !currentConversation} className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white placeholder-gray-400 disabled:opacity-50" />
-                     <button type="submit" disabled={sending || !messageInput.trim() || (loading.messages && messages.length === 0) || !currentConversation} className="px-6 py-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium">
-                       {sending ? "..." : "Send"}
+                 <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-200 bg-white">
+                   <div className="flex items-center space-x-2">
+                     <input
+                        ref={messageInputRef}
+                        type="text"
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        placeholder="Type a message..."
+                        disabled={sending || (loading.messages && messages.length === 0) || !currentConversation}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm bg-gray-50 placeholder-gray-400 disabled:opacity-60"
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }} // Send on Enter, prevent newline
+                     />
+                     <button
+                        type="submit"
+                        disabled={sending || !messageInput.trim() || (loading.messages && messages.length === 0) || !currentConversation}
+                        className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500"
+                        aria-label="Send message"
+                     >
+                       {sending
+                         ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                         : <PaperAirplaneIcon className="w-5 h-5"/>
+                       }
                      </button>
                    </div>
                  </form>

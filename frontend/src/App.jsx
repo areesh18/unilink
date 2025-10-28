@@ -81,7 +81,9 @@ function App() {
               path="/admin/groups"
               element={<AdminGroupManagementPage />}
             />
+            <Route path="/profile/me" element={<ProfilePage />} />
           </Route>
+          
         </Route>
         {/* --- PROTECTED PLATFORM ADMIN ROUTES (Only accessible by Platform Admin) --- */}
         <Route element={<ProtectedAdminRoute requiredRole="platform_admin" />}>

@@ -1,15 +1,15 @@
-// frontend/src/components/AdminSidebar.jsx (New File)
+// frontend/src/components/AdminSidebar.jsx - Refactored for Light Mode
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-
-// Placeholder Icons (replace with actual icons)
-const StatsIcon = () => <span></span>;
-const UserIcon = () => <span></span>;
-const AnnounceIcon = () => <span></span>;
-const MarketIcon = () => <span></span>;
-const GroupIcon = () => <span></span>;
-const CollegeIcon = () => <span></span>;
+import {
+  ChartBarSquareIcon, // StatsIcon
+  UsersIcon,          // UserIcon
+  MegaphoneIcon,      // AnnounceIcon
+  ShoppingCartIcon,   // MarketIcon
+  UserGroupIcon,      // GroupIcon
+  BuildingOfficeIcon  // CollegeIcon
+} from '@heroicons/react/24/outline'; // Using outline Heroicons
 
 function AdminSidebar() {
   const { user } = useAuth();
@@ -17,64 +17,68 @@ function AdminSidebar() {
     user && (user.role === "college_admin" || user.role === "platform_admin");
   const isPlatformAdmin = user && user.role === "platform_admin";
 
-  if (!isAdmin) return null; // Should be protected by route, but safe guard here
+  // Return null if the user isn't an admin (though route should protect this)
+  if (!isAdmin) return null;
 
   let navLinks = [];
 
+  // Define icons mapping
+  const icons = {
+    StatsIcon: ChartBarSquareIcon,
+    UserIcon: UsersIcon,
+    AnnounceIcon: MegaphoneIcon,
+    MarketIcon: ShoppingCartIcon,
+    GroupIcon: UserGroupIcon,
+    CollegeIcon: BuildingOfficeIcon,
+  };
+
+  // Define navigation links based on admin role
   if (isPlatformAdmin) {
     // PLATFORM ADMIN Links Only
     navLinks = [
-      // { name: 'Platform Dashboard', path: '/platform/dashboard', icon: StatsIcon }, // Optional separate dashboard
-      { name: "Platform Stats", path: "/platform/stats", icon: StatsIcon },
-      {
-        name: "Manage Colleges",
-        path: "/platform/colleges",
-        icon: CollegeIcon,
-      },
-      { name: "Manage Admins", path: "/platform/admins", icon: UserIcon },
-      // Optional: Global Views (Need dedicated pages)
-      // { name: 'All Students', path: '/platform/students', icon: UserIcon },
-      // { name: 'All Listings', path: '/platform/listings', icon: MarketIcon },
+      { name: "Platform Stats", path: "/platform/stats", icon: icons.StatsIcon },
+      { name: "Manage Colleges", path: "/platform/colleges", icon: icons.CollegeIcon },
+      { name: "Manage Admins", path: "/platform/admins", icon: icons.UserIcon },
+      // Optional future global views could be added here
     ];
   } else {
     // COLLEGE ADMIN Links Only
     navLinks = [
-      { name: "College Dashboard", path: "/admin/dashboard", icon: StatsIcon },
-      { name: "Student List", path: "/admin/students", icon: UserIcon },
-      {
-        name: "Announcements",
-        path: "/admin/announcements",
-        icon: AnnounceIcon,
-      },
-      { name: "Marketplace Mgt", path: "/admin/listings", icon: MarketIcon },
-      { name: "Group Mgt", path: "/admin/groups", icon: GroupIcon },
+      { name: "Dashboard", path: "/admin/dashboard", icon: icons.StatsIcon }, // Renamed for clarity
+      { name: "Students", path: "/admin/students", icon: icons.UserIcon }, // Simplified name
+      { name: "Announcements", path: "/admin/announcements", icon: icons.AnnounceIcon },
+      { name: "Marketplace", path: "/admin/listings", icon: icons.MarketIcon }, // Simplified name
+      { name: "Groups", path: "/admin/groups", icon: icons.GroupIcon }, // Simplified name
     ];
   }
 
+  // Tailwind classes for NavLink styling
   const baseLinkClass =
-    "flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-150";
+    "flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 group";
   const inactiveLinkClass =
-    "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700";
+    "text-gray-600 hover:bg-gray-100 hover:text-gray-900"; // Light mode inactive/hover
   const activeLinkClass =
-    "bg-red-100 text-red-700 dark:bg-gray-700 dark:text-red-300"; // Use a distinct color for Admin
+    "bg-indigo-50 text-indigo-600 font-semibold"; // Light mode active state (using indigo)
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hidden md:block">
+    // Sidebar container styling: white bg, border-r
+    <aside className="w-64 flex-shrink-0 border-r border-gray-200 bg-white hidden md:block">
       <div className="flex flex-col h-full">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-gray-100 h-16 flex flex-col justify-center">
+          <h3 className="text-base font-semibold text-gray-800">
             {isPlatformAdmin ? "Platform Panel" : "College Panel"}
           </h3>
           {/* Display College Code only for College Admins */}
-          {!isPlatformAdmin && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {user?.collegeCode}
+          {!isPlatformAdmin && user?.collegeCode && (
+            <p className="text-xs text-gray-500">
+              {user.collegeCode}
             </p>
           )}
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {/* Navigation Area */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navLinks.map((item) => (
-            // ... (NavLink rendering remains the same) ...
             <NavLink
               key={item.name}
               to={item.path}
@@ -84,11 +88,18 @@ function AdminSidebar() {
                 }`
               }
             >
-              <item.icon className="mr-3 h-5 w-5" aria-hidden="true" />
+              <item.icon
+                 className={`mr-3 h-5 w-5 flex-shrink-0 ${
+                    // Adjust icon color based on active state
+                    NavLink.isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
+                 }`}
+                 aria-hidden="true"
+               />
               {item.name}
             </NavLink>
           ))}
         </nav>
+        {/* Optional Footer can go here */}
       </div>
     </aside>
   );

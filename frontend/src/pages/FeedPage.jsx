@@ -1,7 +1,10 @@
+// frontend/src/pages/FeedPage.jsx - Refactored for Light Mode
 import React, { useState, useEffect, useCallback } from "react";
 import { fetchFeed } from "../api/announcements"; // Import the API function
 import { useAuth } from "../hooks/useAuth";
-// Helper function to format date/time
+import { MegaphoneIcon } from '@heroicons/react/24/outline'; // Icon for empty state
+
+// Helper function to format date/time (remains the same)
 const formatDate = (dateString) => {
   const options = {
     year: "numeric",
@@ -17,7 +20,7 @@ const formatDate = (dateString) => {
   }
 };
 
-// Component for a single announcement card
+// AnnouncementCard component - Refactored for Light Mode
 const AnnouncementCard = ({ announcement }) => {
   const {
     title,
@@ -29,18 +32,17 @@ const AnnouncementCard = ({ announcement }) => {
     semester,
   } = announcement;
 
-  // Determine badge color based on priority
-  let priorityBadgeColor =
-    "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+  // Define light mode badge colors
+  let priorityBadgeClasses = "bg-gray-100 text-gray-700"; // Default (shouldn't happen with low/medium/high)
   if (priority === "high") {
-    priorityBadgeColor =
-      "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+    priorityBadgeClasses = "bg-red-100 text-red-700";
   } else if (priority === "medium") {
-    priorityBadgeColor =
-      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+    priorityBadgeClasses = "bg-yellow-100 text-yellow-700";
+  } else if (priority === "low") {
+    priorityBadgeClasses = "bg-green-100 text-green-700";
   }
 
-  // Determine target audience string
+  // Determine target audience string (remains the same logic)
   let audience = "College-Wide";
   if (department && semester) {
     audience = `${department} - Sem ${semester}`;
@@ -51,56 +53,63 @@ const AnnouncementCard = ({ announcement }) => {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+    // Card styling: white bg, border, rounded, shadow
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="p-5">
+        {/* Header with Title and Priority Badge */}
         <div className="flex justify-between items-start mb-2 flex-wrap gap-2">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-gray-800">
             {title}
           </h2>
           <span
-            className={`text-xs font-medium px-2.5 py-0.5 rounded ${priorityBadgeColor} capitalize`}
+            className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${priorityBadgeClasses} capitalize`}
           >
             {priority} Priority
           </span>
         </div>
-        <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 whitespace-pre-wrap">
+        {/* Content */}
+        <p className="text-sm text-gray-700 mb-4 whitespace-pre-wrap leading-relaxed">
           {content}
         </p>
-        <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3">
-          <p>Posted by: {authorName}</p>
-          <p>Posted on: {formatDate(createdAt)}</p>
-          <p>Audience: {audience}</p>
+        {/* Footer with Metadata */}
+        <div className="text-xs text-gray-500 border-t border-gray-100 pt-3 space-y-0.5">
+          <p><span className="font-medium text-gray-600">Posted by:</span> {authorName}</p>
+          <p><span className="font-medium text-gray-600">Posted on:</span> {formatDate(createdAt)}</p>
+          <p><span className="font-medium text-gray-600">Audience:</span> {audience}</p>
         </div>
       </div>
     </div>
   );
 };
 
+// FeedPage component - Refactored for Light Mode
 function FeedPage() {
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  // --- Get addWsMessageListener ---
   const { addWsMessageListener } = useAuth();
-  // --- End Get addWsMessageListener ---
-  // --- Use useCallback for loadFeed ---
+
+  // Load feed data (logic remains the same)
   const loadFeed = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await fetchFeed();
-      setAnnouncements(data);
+      // Sort by createdAt descending to ensure newest are first
+      const sortedData = (data || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setAnnouncements(sortedData);
     } catch (err) {
       setError(err.toString());
     } finally {
       setIsLoading(false);
     }
   }, []);
+
   useEffect(() => {
     loadFeed();
-  }, [loadFeed]); // Empty dependency array for initial load
+  }, [loadFeed]);
 
-  // --- NEW: WebSocket Announcement Listener ---
+  // WebSocket listener (logic remains the same)
   useEffect(() => {
     if (!addWsMessageListener) return;
 
@@ -108,55 +117,67 @@ function FeedPage() {
       if (message.type === "newAnnouncement") {
         console.log("FeedPage received WS announcement:", message.payload);
         setAnnouncements((prevAnnouncements) => {
-          // Avoid adding duplicate if announcement already exists
           if (prevAnnouncements.some((a) => a.id === message.payload.id)) {
             return prevAnnouncements;
           }
-          // Prepend the new announcement to the list
-          return [message.payload, ...prevAnnouncements];
+          // Add new announcement and re-sort
+          const updatedAnnouncements = [message.payload, ...prevAnnouncements];
+          updatedAnnouncements.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return updatedAnnouncements;
         });
       }
     });
 
-    // Cleanup function
     return () => {
       console.log("FeedPage removing WS listener");
       removeListener();
     };
-  }, [addWsMessageListener]); // Depend only on the listener function from context
-  // --- End WebSocket Announcement Listener ---
+  }, [addWsMessageListener]);
+
+  // Loading Spinner Component
+  const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-16">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+      <p className="ml-3 text-gray-500">Loading feed...</p>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+    // Main container with spacing
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Page Header */}
+      <h1 className="text-2xl font-bold text-gray-900">
         Announcements Feed
       </h1>
 
-      {isLoading && (
-        <div className="text-center py-10">
-          <p className="text-gray-500 dark:text-gray-400">Loading feed...</p>
-        </div>
-      )}
+      {/* Loading State */}
+      {isLoading && <LoadingSpinner />}
 
+      {/* Error State */}
       {error && !isLoading && (
         <div
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded dark:bg-red-900 dark:border-red-700 dark:text-red-300"
+          className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded relative text-sm"
           role="alert"
         >
-          <strong className="font-bold">Error:</strong>
-          <span className="block sm:inline"> {error}</span>
+          <strong className="font-semibold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
         </div>
       )}
 
+      {/* Success State - Display Announcements or Empty State */}
       {!isLoading && !error && (
         <>
           {announcements.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-gray-500 dark:text-gray-400">
-                No announcements found.
+            // Empty state message
+            <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-lg">
+              <MegaphoneIcon className="mx-auto h-12 w-12 text-gray-300" strokeWidth={1}/>
+              <h3 className="mt-2 text-sm font-semibold text-gray-700">No Announcements Yet</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Check back later for updates from your college.
               </p>
             </div>
           ) : (
-            // Simple list layout
+            // List layout for announcements
             <div className="space-y-4">
               {announcements.map((announcement) => (
                 <AnnouncementCard
