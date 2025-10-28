@@ -1,16 +1,16 @@
-// frontend/src/pages/MarketPlace.jsx - Refactored for Light Mode
+// frontend/src/pages/MarketPlace.jsx - Refactored for Light Mode & Responsiveness
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { fetchListings } from "../api/listings"; // Import the API function
-import { PlusIcon, PhotoIcon } from '@heroicons/react/24/outline'; // Import icons
+import { PlusIcon, PhotoIcon, ShoppingBagIcon } from '@heroicons/react/24/outline'; // Import icons
 
-// ListingCard component - Refactored for Light Mode
+// ListingCard component - Refactored for Light Mode & Responsiveness
+// ListingCard component - Adjusted for compactness
 const ListingCard = ({ listing }) => {
   // Fallback for image errors
   const handleImageError = (e) => {
-    e.target.onerror = null; // Prevent infinite loop
-    e.target.style.display = 'none'; // Hide broken image
-    // Find the placeholder sibling and display it
+    e.target.onerror = null;
+    e.target.style.display = 'none';
     const placeholder = e.target.nextElementSibling;
     if (placeholder) {
       placeholder.style.display = 'flex';
@@ -18,54 +18,54 @@ const ListingCard = ({ listing }) => {
   };
 
   return (
-    // Card styling: white bg, border, rounded corners, subtle shadow, hover effect
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm transition duration-200 ease-in-out hover:shadow-md group">
-      {/* Image container */}
-      <div className="h-48 bg-gray-100 relative">
+    // Card styling remains largely the same
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm transition duration-200 ease-in-out hover:shadow-md group flex flex-col">
+      {/* Image container - Reduced height, especially on mobile */}
+      <div className="h-32 sm:h-40 bg-gray-100 relative"> {/* Reduced height: h-32 base, sm:h-40 */}
         {listing.imageUrl ? (
           <>
             <img
               src={listing.imageUrl}
               alt={listing.title}
               className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-              onError={handleImageError} // Handle broken image links
+              onError={handleImageError}
             />
-            {/* Hidden placeholder for error case */}
-            <div className="absolute inset-0 hidden items-center justify-center flex-col text-gray-400">
-                <PhotoIcon className="w-12 h-12 mb-1"/>
+            {/* Hidden placeholder */}
+            <div className="absolute inset-0 hidden items-center justify-center flex-col text-gray-400 bg-gray-100">
+                <PhotoIcon className="w-8 h-8 mb-1"/> {/* Smaller icon */}
                 <span className="text-xs">Image unavailable</span>
             </div>
           </>
         ) : (
-          // Visible placeholder when no image URL
+          // Visible placeholder
           <div className="h-full w-full flex items-center justify-center flex-col text-gray-400">
-            <PhotoIcon className="w-12 h-12 mb-1"/>
+            <PhotoIcon className="w-8 h-8 mb-1"/> {/* Smaller icon */}
             <span className="text-xs">No Image Provided</span>
           </div>
         )}
       </div>
-      {/* Content area */}
-      <div className="p-4">
+      {/* Content area - Reduced padding and margins */}
+      <div className="p-3 flex flex-col flex-grow"> {/* Reduced base padding to p-3 */}
         {/* Title */}
-        <h3 className="text-base font-semibold text-gray-800 mb-1 truncate group-hover:text-indigo-600 transition-colors duration-150" title={listing.title}>
+        <h3 className="text-sm font-semibold text-gray-800 mb-0.5 truncate group-hover:text-indigo-600 transition-colors duration-150" title={listing.title}> {/* Reduced mb */}
           {listing.title}
         </h3>
         {/* Price */}
-        <p className="text-indigo-600 font-bold text-lg mb-2">
+        <p className="text-indigo-600 font-bold text-base mb-1"> {/* Reduced mb */}
           ${listing.price.toFixed(2)}
         </p>
-        {/* Description */}
-        <p className="text-sm text-gray-600 mb-3 line-clamp-2 h-10" title={listing.description}>
+        {/* Description - Reduced line-clamp and height */}
+        <p className="text-xs text-gray-600 mb-2 line-clamp-2 h-8 flex-grow" title={listing.description}> {/* Reduced text size, mb, line-clamp, height */}
           {listing.description || <span className="italic text-gray-400">No description provided.</span>}
         </p>
         {/* Seller Info */}
-        <div className="text-xs text-gray-500">
-          Sold by: {listing.seller.name}
+        <div className="text-xs text-gray-500 mt-auto pt-1.5 border-t border-gray-100"> {/* Reduced pt */}
+          Sold by: <span className="font-medium text-gray-600">{listing.seller.name}</span>
         </div>
         {/* View Details Link */}
         <Link
           to={`/market/${listing.id}`}
-          className="mt-3 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors duration-150"
+          className="mt-1.5 inline-block text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors duration-150 self-start" // Reduced mt
         >
           View Details &rarr;
         </Link>
@@ -74,7 +74,7 @@ const ListingCard = ({ listing }) => {
   );
 };
 
-// MarketplacePage component - Refactored for Light Mode
+// MarketplacePage component - Refactored for Light Mode & Responsiveness
 function MarketplacePage() {
   const [listings, setListings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,7 +86,9 @@ function MarketplacePage() {
       setError(null);
       try {
         const data = await fetchListings();
-        setListings(data || []);
+        // Sort listings by creation date, newest first
+        const sortedData = (data || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setListings(sortedData);
       } catch (err) {
         setError(err.toString());
       } finally {
@@ -99,9 +101,9 @@ function MarketplacePage() {
 
   // Loading Spinner Component
   const LoadingSpinner = () => (
-    <div className="flex justify-center items-center py-10">
+    <div className="flex justify-center items-center py-16">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-      <p className="ml-3 text-gray-500">Loading listings...</p>
+      <p className="ml-3 text-sm text-gray-500">Loading listings...</p>
     </div>
   );
 
@@ -116,7 +118,7 @@ function MarketplacePage() {
         {/* Create Listing Button */}
         <Link
           to="/market/new"
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
         >
           <PlusIcon className="w-4 h-4" strokeWidth={3}/>
           Create Listing
@@ -142,18 +144,16 @@ function MarketplacePage() {
         <>
           {listings.length === 0 ? (
             // Empty state message
-            <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-lg">
-              <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-semibold text-gray-700">No listings found</h3>
+            <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-lg bg-white">
+              <ShoppingBagIcon className="mx-auto h-12 w-12 text-gray-300" strokeWidth={1}/>
+              <h3 className="mt-2 text-sm font-semibold text-gray-700">Marketplace is Empty</h3>
               <p className="mt-1 text-sm text-gray-500">
-                There are currently no items listed for sale in your college.
+                Be the first to list an item for sale in your college!
               </p>
               <div className="mt-6">
                  <Link
                     to="/market/new"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
                   >
                     <PlusIcon className="w-3 h-3" strokeWidth={3}/>
                     List an Item
@@ -161,8 +161,8 @@ function MarketplacePage() {
               </div>
             </div>
           ) : (
-            // Grid for listing cards
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            // Grid for listing cards - Updated responsive columns and gap
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5"> {/* Start with 2 cols, increase */}
               {listings.map((listing) => (
                 <ListingCard key={listing.id} listing={listing} />
               ))}
