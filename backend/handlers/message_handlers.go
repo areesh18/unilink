@@ -2,18 +2,24 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
+	"fmt" // Keep fmt
+	"log"
 	"net/http"
-	"strconv"
-	"strings"
+	"strconv" // Keep strconv
+	"strings" // Keep strings
+	"time"    // Keep time
 
 	"unilink-backend/db"
 	"unilink-backend/models"
-	"unilink-backend/utils"
+	"unilink-backend/utils" // <-- Ensure utils is imported
+	"unilink-backend/websocket"
 
 	"github.com/gorilla/mux"
 )
 
+// --- REMOVE local key definitions ---
+
+// ... (Keep SendMessageRequest, MessageResponse, MessageSenderData, ConversationListItem structs) ...
 // SendMessageRequest is the payload for sending a message
 type SendMessageRequest struct {
 	Content          string `json:"content"`
@@ -55,6 +61,7 @@ type ConversationListItem struct {
 	GroupInfo        *GroupResponse     `json:"groupInfo,omitempty"`   // For groups
 }
 
+// ... (Keep GetConversations, GetMessages functions) ...
 // GetConversations returns all conversations (DMs + Groups) for the user
 func GetConversations(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
@@ -72,7 +79,6 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 		Find(&friendships)
 
 	for _, f := range friendships {
-		// Determine the other user (friend)
 		var friend models.User
 		if f.UserID == claims.UserID {
 			friend = f.Friend
@@ -80,7 +86,6 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 			friend = f.User
 		}
 
-		// Generate conversation ID (sorted user IDs for consistency)
 		var conversationID string
 		if claims.UserID < friend.ID {
 			conversationID = fmt.Sprintf("dm_%d_%d", claims.UserID, friend.ID)
@@ -88,11 +93,9 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 			conversationID = fmt.Sprintf("dm_%d_%d", friend.ID, claims.UserID)
 		}
 
-		// Get last message
 		var lastMsg models.Message
 		db.DB.Where("conversation_id = ?", conversationID).Order("created_at DESC").First(&lastMsg)
 
-		// Count unread messages
 		var unreadCount int64
 		db.DB.Model(&models.Message{}).
 			Where("conversation_id = ? AND sender_id != ? AND is_read = ?", conversationID, claims.UserID, false).
@@ -104,7 +107,7 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 			Name:             friend.Name,
 			Avatar:           friend.ProfilePicture,
 			LastMessage:      lastMsg.Content,
-			LastMessageTime:  lastMsg.CreatedAt.Format("2006-01-02 15:04:05"),
+			LastMessageTime:  lastMsg.CreatedAt.Format("2006-01-02 15:04:05"), // Use format
 			UnreadCount:      int(unreadCount),
 			Participant: &MessageSenderData{
 				ID:             friend.ID,
@@ -121,11 +124,9 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 	for _, m := range memberships {
 		conversationID := fmt.Sprintf("group_%d", m.Group.ID)
 
-		// Get last message
 		var lastMsg models.Message
 		db.DB.Preload("Sender").Where("conversation_id = ?", conversationID).Order("created_at DESC").First(&lastMsg)
 
-		// Count unread messages
 		var unreadCount int64
 		db.DB.Model(&models.Message{}).
 			Where("conversation_id = ? AND sender_id != ? AND is_read = ?", conversationID, claims.UserID, false).
@@ -133,7 +134,12 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 
 		lastMessage := lastMsg.Content
 		if lastMsg.SenderID != 0 {
-			lastMessage = lastMsg.Sender.Name + ": " + lastMsg.Content
+			// Ensure sender name isn't empty before prepending
+			senderName := lastMsg.Sender.Name
+			if senderName == "" { // Fallback if sender preload failed or name is empty
+				senderName = "User"
+			}
+			lastMessage = senderName + ": " + lastMsg.Content
 		}
 
 		conversations = append(conversations, ConversationListItem{
@@ -142,16 +148,20 @@ func GetConversations(w http.ResponseWriter, r *http.Request) {
 			Name:             m.Group.Name,
 			Avatar:           m.Group.Avatar,
 			LastMessage:      lastMessage,
-			LastMessageTime:  lastMsg.CreatedAt.Format("2006-01-02 15:04:05"),
+			LastMessageTime:  lastMsg.CreatedAt.Format("2006-01-02 15:04:05"), // Use format
 			UnreadCount:      int(unreadCount),
-			GroupInfo: &GroupResponse{
+			GroupInfo: &GroupResponse{ // Assuming GroupResponse is defined elsewhere or inline it
 				ID:          m.Group.ID,
 				Name:        m.Group.Name,
 				Description: m.Group.Description,
 				Type:        m.Group.Type,
+				Avatar:      m.Group.Avatar,
+				// MemberCount needs separate query if required here
 			},
 		})
 	}
+
+	// TODO: Sort conversations by LastMessageTime DESC before sending
 
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"total":         len(conversations),
@@ -167,45 +177,34 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get conversation ID from URL
 	vars := mux.Vars(r)
 	conversationID := vars["conversationId"]
 
-	// Validate conversation ID format
 	if !strings.HasPrefix(conversationID, "dm_") && !strings.HasPrefix(conversationID, "group_") {
 		respondWithError(w, http.StatusBadRequest, "Invalid conversation ID format")
 		return
 	}
 
-	// Verify user has access to this conversation
 	if !userHasAccessToConversation(claims.UserID, conversationID) {
 		respondWithError(w, http.StatusForbidden, "Access denied to this conversation")
 		return
 	}
 
-	// Get pagination parameters
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 50 // Default
+	limit := 50
 	offset := 0
-
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+		limit = l
 	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
+	if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+		offset = o
 	}
 
-	// Get messages
 	var messages []models.Message
 	result := db.DB.Preload("Sender").
 		Where("conversation_id = ? AND is_deleted = ?", conversationID, false).
-		Order("created_at DESC").
+		Order("created_at ASC"). // Fetch in ascending order for easier display
 		Limit(limit).
 		Offset(offset).
 		Find(&messages)
@@ -215,15 +214,16 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark messages as read (where current user is receiver)
-	db.DB.Model(&models.Message{}).
-		Where("conversation_id = ? AND sender_id != ? AND is_read = ?", conversationID, claims.UserID, false).
-		Update("is_read", true)
+	// Mark messages as read (can be done async or after response for perf)
+	go func(convID string, userID uint) {
+		db.DB.Model(&models.Message{}).
+			Where("conversation_id = ? AND sender_id != ? AND is_read = ?", convID, userID, false).
+			Update("is_read", true)
+	}(conversationID, claims.UserID)
 
-	// Transform to response (reverse order for chronological display)
 	var response []MessageResponse
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
+	// No need to reverse if fetched in ASC order
+	for _, msg := range messages {
 		response = append(response, MessageResponse{
 			ID:               msg.ID,
 			Content:          msg.Content,
@@ -236,17 +236,16 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 				ProfilePicture: msg.Sender.ProfilePicture,
 			},
 			IsRead:    msg.IsRead,
-			CreatedAt: msg.CreatedAt.Format("2006-01-02 15:04:05"),
+			CreatedAt: msg.CreatedAt.Format("2006-01-02 15:04:05"), // Use format
 		})
 	}
 
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"total":    len(response),
+		"total":    len(response), // This might not be the *total* in DB if paginated
 		"messages": response,
 	})
 }
 
-// SendMessage sends a new message to a conversation
 func SendMessage(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
 	if !ok {
@@ -256,39 +255,42 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	var req SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload: "+err.Error())
 		return
 	}
 
-	// Validate input
 	req.Content = strings.TrimSpace(req.Content)
 	if req.Content == "" {
 		respondWithError(w, http.StatusBadRequest, "Message content is required")
 		return
 	}
-
 	if req.ConversationType != "dm" && req.ConversationType != "group" {
 		respondWithError(w, http.StatusBadRequest, "Invalid conversation type")
 		return
 	}
 
-	// Generate conversation ID if not provided
-	if req.ConversationID == "" {
-		if req.ConversationType == "dm" && req.ReceiverID != nil {
-			if claims.UserID < *req.ReceiverID {
-				req.ConversationID = fmt.Sprintf("dm_%d_%d", claims.UserID, *req.ReceiverID)
-			} else {
-				req.ConversationID = fmt.Sprintf("dm_%d_%d", *req.ReceiverID, claims.UserID)
-			}
-		} else if req.ConversationType == "group" && req.GroupID != nil {
-			req.ConversationID = fmt.Sprintf("group_%d", *req.GroupID)
-		} else {
-			respondWithError(w, http.StatusBadRequest, "Missing receiver ID or group ID")
+	// Re-verify or generate conversation ID
+	if req.ConversationType == "dm" {
+		if req.ReceiverID == nil || *req.ReceiverID == 0 {
+			respondWithError(w, http.StatusBadRequest, "Missing receiverId for DM")
 			return
 		}
+		if claims.UserID < *req.ReceiverID {
+			req.ConversationID = fmt.Sprintf("dm_%d_%d", claims.UserID, *req.ReceiverID)
+		} else {
+			req.ConversationID = fmt.Sprintf("dm_%d_%d", *req.ReceiverID, claims.UserID)
+		}
+		req.GroupID = nil // Ensure GroupID is nil for DMs
+	} else { // group
+		if req.GroupID == nil || *req.GroupID == 0 {
+			respondWithError(w, http.StatusBadRequest, "Missing groupId for group message")
+			return
+		}
+		req.ConversationID = fmt.Sprintf("group_%d", *req.GroupID)
+		req.ReceiverID = nil // Ensure ReceiverID is nil for group messages
 	}
 
-	// Verify user has access to this conversation
+	// Verify user has access
 	if !userHasAccessToConversation(claims.UserID, req.ConversationID) {
 		respondWithError(w, http.StatusForbidden, "Access denied to this conversation")
 		return
@@ -301,21 +303,27 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		ConversationType: req.ConversationType,
 		ConversationID:   req.ConversationID,
 		SenderID:         claims.UserID,
-		ReceiverID:       req.ReceiverID,
-		GroupID:          req.GroupID,
+		ReceiverID:       req.ReceiverID, // Will be nil for group messages
+		GroupID:          req.GroupID,    // Will be nil for DMs
 		CollegeID:        claims.CollegeID,
-		IsRead:           false,
+		IsRead:           false, // Initially unread for others
+		IsDeleted:        false,
+		CreatedAt:        time.Now(), // Explicitly set creation time
+		UpdatedAt:        time.Now(),
 	}
 
+	// Save to DB
 	if err := db.DB.Create(&message).Error; err != nil {
+		log.Printf("Error creating message in DB: %v", err) // Log DB error
 		respondWithError(w, http.StatusInternalServerError, "Failed to send message")
 		return
 	}
 
-	// Preload sender info
+	// Preload sender for response/broadcast (even though we have claims, this ensures consistency)
 	db.DB.Preload("Sender").First(&message, message.ID)
 
-	response := MessageResponse{
+	// Prepare response payload
+	responsePayload := MessageResponse{
 		ID:               message.ID,
 		Content:          message.Content,
 		Type:             message.Type,
@@ -330,11 +338,27 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: message.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 
+	// --- Broadcast the new message via Hub ---
+	hub, ok := r.Context().Value(utils.HubKey).(*websocket.Hub) // Use key from utils
+	if ok && hub != nil {
+		wsMsg := &websocket.WSMessage{
+			Type:    "newMessage",
+			Payload: responsePayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("DEBUG: Successfully retrieved Hub and broadcasting message for conv %s", responsePayload.ConversationID) // Success Log
+	} else {
+		log.Printf("Warning: Hub not found in context for SendMessage. Ok: %v, HubNil: %v", ok, hub == nil)
+	}
+	// --- End Broadcast ---
+
+	// Send HTTP response
 	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
-		"message": response,
+		"message": responsePayload, // Send back the created message object
 	})
 }
 
+// ... (Keep DeleteMessage, userHasAccessToConversation functions) ...
 // DeleteMessage allows user to delete their own message
 func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
@@ -343,7 +367,6 @@ func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get message ID
 	vars := mux.Vars(r)
 	messageID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -351,17 +374,33 @@ func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find message and verify ownership
 	var message models.Message
-	result := db.DB.Where("id = ? AND sender_id = ?", messageID, claims.UserID).First(&message)
+	// Also check IsDeleted status to prevent multiple deletes
+	result := db.DB.Where("id = ? AND sender_id = ? AND is_deleted = ?", messageID, claims.UserID, false).First(&message)
 	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Message not found or access denied")
+		respondWithError(w, http.StatusNotFound, "Message not found or already deleted")
 		return
 	}
 
-	// Soft delete (mark as deleted)
+	// Soft delete
 	message.IsDeleted = true
-	db.DB.Save(&message)
+	message.Content = "This message was deleted." // Optionally clear/replace content
+	message.UpdatedAt = time.Now()                // Update timestamp
+	if err := db.DB.Save(&message).Error; err != nil {
+		log.Printf("Error soft deleting message %d: %v", messageID, err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to delete message")
+		return
+	}
+
+	// TODO: Optionally broadcast a "messageDeleted" event via WebSocket
+	// hub, ok := r.Context().Value(utils.HubKey).(*websocket.Hub)
+	// if ok && hub != nil {
+	//  wsMsg := &websocket.WSMessage{
+	//      Type: "messageDeleted",
+	//      Payload: map[string]interface{}{"messageId": messageID, "conversationId": message.ConversationID},
+	//  }
+	//  hub.BroadcastJSON(wsMsg) // Need targeting logic here too
+	// }
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Message deleted successfully",
@@ -371,33 +410,45 @@ func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 // userHasAccessToConversation checks if user can access a conversation
 func userHasAccessToConversation(userID uint, conversationID string) bool {
 	if strings.HasPrefix(conversationID, "dm_") {
-		// Extract both user IDs from conversation ID
 		var userID1, userID2 uint
-		fmt.Sscanf(conversationID, "dm_%d_%d", &userID1, &userID2)
-
-		// Check if current user is one of the participants
-		if userID != userID1 && userID != userID2 {
+		// Use Sscanf for safer parsing
+		_, err := fmt.Sscanf(conversationID, "dm_%d_%d", &userID1, &userID2)
+		if err != nil || (userID != userID1 && userID != userID2) {
+			log.Printf("User %d check failed for DM %s: Parse error or user not participant", userID, conversationID)
 			return false
 		}
 
-		// Check if they are actually friends (accepted friendship)
+		// Check friendship status
 		var friendship models.Friendship
-		db.DB.Where(
+		result := db.DB.Where(
 			"((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = ?",
 			userID1, userID2, userID2, userID1, "accepted",
 		).First(&friendship)
 
-		return friendship.ID != 0
+		if result.Error != nil {
+			log.Printf("User %d check failed for DM %s: Friendship not found or not accepted", userID, conversationID)
+			return false // No accepted friendship found
+		}
+		return true // User is participant AND friendship exists
 
 	} else if strings.HasPrefix(conversationID, "group_") {
-		// Extract group ID
 		var groupID uint
-		fmt.Sscanf(conversationID, "group_%d", &groupID)
+		_, err := fmt.Sscanf(conversationID, "group_%d", &groupID)
+		if err != nil {
+			log.Printf("User %d check failed for Group %s: Group ID parse error", userID, conversationID)
+			return false
+		}
 
-		// Check if user is member of the group
+		// Check group membership
 		var membership models.GroupMember
-		db.DB.Where("group_id = ? AND user_id = ?", groupID, userID).First(&membership)
-		return membership.ID != 0
+		result := db.DB.Where("group_id = ? AND user_id = ?", groupID, userID).First(&membership)
+		if result.Error != nil {
+			log.Printf("User %d check failed for Group %s: Not a member", userID, conversationID)
+			return false // Not a member
+		}
+		return true // Is a member
 	}
-	return false
+
+	log.Printf("User %d check failed: Invalid conversation format %s", userID, conversationID)
+	return false // Invalid conversation ID format
 }

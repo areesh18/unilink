@@ -15,6 +15,13 @@ export default defineConfig({
         // Optional: rewrite path if needed, but usually not necessary
         // rewrite: (path) => path.replace(/^\/api/, '')
       },
+      // Explicitly proxy WebSocket connections
+      '/ws': {
+        target: 'ws://localhost:8080', // Use ws:// protocol
+        ws: true, // <-- IMPORTANT: Enable WebSocket proxying
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 })

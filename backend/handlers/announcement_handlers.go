@@ -2,17 +2,23 @@ package handlers
 
 import (
 	"encoding/json"
+	"log" // <-- Ensure log is imported
 	"net/http"
 	"strconv"
 	"strings"
+	"time" // Keep time
 
 	"unilink-backend/db"
 	"unilink-backend/models"
-	"unilink-backend/utils"
+	"unilink-backend/utils" // <-- Ensure utils is imported
+	"unilink-backend/websocket"
 
 	"github.com/gorilla/mux"
 )
 
+// --- REMOVE local key definitions ---
+
+// ... (Keep CreateAnnouncementRequest, AnnouncementResponse structs) ...
 // CreateAnnouncementRequest is the payload for creating announcements
 type CreateAnnouncementRequest struct {
 	Title      string  `json:"title"`
@@ -35,11 +41,6 @@ type AnnouncementResponse struct {
 	UpdatedAt  string  `json:"updatedAt"`
 }
 
-// ============================================
-// COLLEGE ADMIN FUNCTIONS
-// ============================================
-
-// CreateAnnouncement allows college admin to post a new notice
 func CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
 	if !ok {
@@ -53,16 +54,13 @@ func CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input
 	req.Title = strings.TrimSpace(req.Title)
 	req.Content = strings.TrimSpace(req.Content)
-
 	if req.Title == "" || req.Content == "" {
 		respondWithError(w, http.StatusBadRequest, "Title and content are required")
 		return
 	}
 
-	// Validate priority
 	validPriorities := map[string]bool{"low": true, "medium": true, "high": true}
 	if req.Priority == "" {
 		req.Priority = "medium"
@@ -78,38 +76,70 @@ func CreateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		Content:    req.Content,
 		Priority:   req.Priority,
 		CollegeID:  claims.CollegeID,
-		Department: req.Department,
-		Semester:   req.Semester,
+		Department: req.Department, // Assign directly (can be nil)
+		Semester:   req.Semester,   // Assign directly (can be nil)
 		CreatedBy:  claims.UserID,
+		CreatedAt:  time.Now(), // Explicitly set
+		UpdatedAt:  time.Now(),
 	}
 
 	result := db.DB.Create(&announcement)
 	if result.Error != nil {
+		log.Printf("Error creating announcement in DB: %v", result.Error)
 		respondWithError(w, http.StatusInternalServerError, "Failed to create announcement")
 		return
 	}
 
-	// Preload author info for response
+	// Preload author info for response & broadcast
 	db.DB.Preload("Author").First(&announcement, announcement.ID)
 
-	response := AnnouncementResponse{
+	// Prepare response payload
+	responsePayload := AnnouncementResponse{
 		ID:         announcement.ID,
 		Title:      announcement.Title,
 		Content:    announcement.Content,
 		Priority:   announcement.Priority,
 		Department: announcement.Department,
 		Semester:   announcement.Semester,
-		AuthorName: announcement.Author.Name,
+		AuthorName: announcement.Author.Name, // Make sure Author was loaded
 		CreatedAt:  announcement.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:  announcement.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
+	// Broadcast the new announcement via Hub
+	hub, ok := r.Context().Value(utils.HubKey).(*websocket.Hub) // Use key from utils
+	if ok && hub != nil {
+		// Create payload including top-level collegeId for easier targeting in hub
+		broadcastPayload := map[string]interface{}{
+			"id":         responsePayload.ID,
+			"title":      responsePayload.Title,
+			"content":    responsePayload.Content,
+			"priority":   responsePayload.Priority,
+			"department": responsePayload.Department, // Can be nil
+			"semester":   responsePayload.Semester,   // Can be nil
+			"authorName": responsePayload.AuthorName,
+			"createdAt":  responsePayload.CreatedAt,
+			"updatedAt":  responsePayload.UpdatedAt,
+			"collegeId":  announcement.CollegeID, // Add required collegeId
+		}
+		wsMsg := &websocket.WSMessage{
+			Type:    "newAnnouncement",
+			Payload: broadcastPayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("DEBUG: Successfully retrieved Hub and broadcasting announcement %d", responsePayload.ID)
+	} else {
+		log.Printf("Warning: Hub not found in context for CreateAnnouncement. Ok: %v, HubNil: %v", ok, hub == nil)
+	}
+
+	// Send HTTP response
 	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
 		"message":      "Announcement created successfully",
-		"announcement": response,
+		"announcement": responsePayload,
 	})
 }
 
+// ... (Keep GetCollegeAnnouncements, UpdateAnnouncement, DeleteAnnouncement, GetStudentFeed functions) ...
 // GetCollegeAnnouncements returns all announcements created by the admin's college
 func GetCollegeAnnouncements(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
@@ -118,7 +148,6 @@ func GetCollegeAnnouncements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all announcements from admin's college
 	var announcements []models.Announcement
 	result := db.DB.Preload("Author").
 		Where("college_id = ?", claims.CollegeID).
@@ -130,7 +159,6 @@ func GetCollegeAnnouncements(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transform to response
 	var response []AnnouncementResponse
 	for _, a := range announcements {
 		response = append(response, AnnouncementResponse{
@@ -160,7 +188,6 @@ func UpdateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get announcement ID from URL
 	vars := mux.Vars(r)
 	announcementID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -168,14 +195,12 @@ func UpdateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request
-	var req CreateAnnouncementRequest
+	var req CreateAnnouncementRequest // Reuse request struct
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
 
-	// Find announcement
 	var announcement models.Announcement
 	result := db.DB.Where("id = ? AND college_id = ?", announcementID, claims.CollegeID).First(&announcement)
 	if result.Error != nil {
@@ -183,28 +208,30 @@ func UpdateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update fields
+	// Update fields from request
 	announcement.Title = strings.TrimSpace(req.Title)
 	announcement.Content = strings.TrimSpace(req.Content)
-	announcement.Priority = req.Priority
+	announcement.Priority = req.Priority // Assume validated on frontend or handle here
 	announcement.Department = req.Department
 	announcement.Semester = req.Semester
+	announcement.UpdatedAt = time.Now()
 
 	if announcement.Title == "" || announcement.Content == "" {
-		respondWithError(w, http.StatusBadRequest, "Title and content are required")
+		respondWithError(w, http.StatusBadRequest, "Title and content cannot be empty")
 		return
 	}
+	// Add priority validation if needed
 
-	// Save
 	if err := db.DB.Save(&announcement).Error; err != nil {
+		log.Printf("Error updating announcement %d: %v", announcementID, err)
 		respondWithError(w, http.StatusInternalServerError, "Failed to update announcement")
 		return
 	}
 
-	// Preload author
+	// Preload author for the response
 	db.DB.Preload("Author").First(&announcement, announcement.ID)
 
-	response := AnnouncementResponse{
+	responsePayload := AnnouncementResponse{
 		ID:         announcement.ID,
 		Title:      announcement.Title,
 		Content:    announcement.Content,
@@ -216,9 +243,11 @@ func UpdateAnnouncement(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:  announcement.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
+	// TODO: Optionally broadcast "announcementUpdated" event via WebSocket
+
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"message":      "Announcement updated successfully",
-		"announcement": response,
+		"announcement": responsePayload,
 	})
 }
 
@@ -230,7 +259,6 @@ func DeleteAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get announcement ID
 	vars := mux.Vars(r)
 	announcementID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -238,7 +266,7 @@ func DeleteAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find and verify ownership
+	// Find announcement belonging to the admin's college
 	var announcement models.Announcement
 	result := db.DB.Where("id = ? AND college_id = ?", announcementID, claims.CollegeID).First(&announcement)
 	if result.Error != nil {
@@ -246,20 +274,21 @@ func DeleteAnnouncement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Soft delete
-	db.DB.Delete(&announcement)
+	// Perform soft delete
+	if err := db.DB.Delete(&announcement).Error; err != nil {
+		log.Printf("Error deleting announcement %d: %v", announcementID, err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to delete announcement")
+		return
+	}
+
+	// TODO: Optionally broadcast "announcementDeleted" event via WebSocket
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Announcement deleted successfully",
 	})
 }
 
-// ============================================
-// STUDENT FUNCTIONS
-// ============================================
-
 // GetStudentFeed returns announcements relevant to the student
-// This is THE KEY FUNCTION - implements the targeting logic!
 func GetStudentFeed(w http.ResponseWriter, r *http.Request) {
 	claims, ok := utils.GetUserClaims(r)
 	if !ok {
@@ -267,33 +296,41 @@ func GetStudentFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get student's profile to know their department and semester
 	var user models.User
 	if err := db.DB.First(&user, claims.UserID).Error; err != nil {
-		respondWithError(w, http.StatusNotFound, "User not found")
+		respondWithError(w, http.StatusNotFound, "User profile not found")
 		return
 	}
 
-	// Build the query with targeting logic
-	// Student sees announcement if:
-	// 1. It's from their college
-	// 2. AND (department is null OR department matches theirs)
-	// 3. AND (semester is null OR semester matches theirs)
-
 	var announcements []models.Announcement
-	result := db.DB.Preload("Author").
-		Where("college_id = ?", claims.CollegeID).
-		Where("(department IS NULL OR department = ?)", user.Department).
-		Where("(semester IS NULL OR semester = ?)", user.Semester).
-		Order("created_at DESC").
-		Find(&announcements)
+	query := db.DB.Preload("Author").
+		Where("college_id = ?", claims.CollegeID)
+
+	// Apply targeting filters
+	// Department filter: Show if announcement has no department OR department matches user's
+	if user.Department != "" {
+		query = query.Where("(department IS NULL OR department = ?)", user.Department)
+	} else {
+		// If user has no department set, only show college-wide (department IS NULL)
+		query = query.Where("department IS NULL")
+	}
+
+	// Semester filter: Show if announcement has no semester OR semester matches user's
+	if user.Semester > 0 {
+		query = query.Where("(semester IS NULL OR semester = ?)", user.Semester)
+	} else {
+		// If user has no semester set, only show non-semester-specific (semester IS NULL)
+		query = query.Where("semester IS NULL")
+	}
+
+	result := query.Order("created_at DESC").Find(&announcements)
 
 	if result.Error != nil {
+		log.Printf("Error fetching student feed for user %d: %v", claims.UserID, result.Error)
 		respondWithError(w, http.StatusInternalServerError, "Failed to fetch feed")
 		return
 	}
 
-	// Transform to response
 	var response []AnnouncementResponse
 	for _, a := range announcements {
 		response = append(response, AnnouncementResponse{

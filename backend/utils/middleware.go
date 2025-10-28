@@ -5,12 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	// No websocket import needed here
 )
 
 // ContextKey is a custom type for context keys to avoid collisions
 type ContextKey string
 
 const UserClaimsKey ContextKey = "userClaims"
+
+// --- ADD HUB CONTEXT KEY DEFINITIONS ---
+// Use an unexported type to prevent collisions with other packages
+type hubKeyType string
+
+// HubKey is the key used to store/retrieve the websocket Hub from context.
+const HubKey hubKeyType = "hub"
+
+// --- END HUB CONTEXT KEY DEFINITIONS ---
 
 // ValidateToken is middleware that validates JWT and attaches claims to request context
 func ValidateToken(next http.Handler) http.Handler {
