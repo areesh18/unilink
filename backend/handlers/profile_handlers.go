@@ -15,18 +15,19 @@ import (
 
 // ProfileResponse contains safe user profile data
 type ProfileResponse struct {
-	ID             uint   `json:"id"`
-	Name           string `json:"name"`
-	Email          string `json:"email"`
-	StudentID      string `json:"studentId"`
-	ProfilePicture string `json:"profilePicture"`
-	Bio            string `json:"bio"`
-	Department     string `json:"department"`
-	Semester       int    `json:"semester"`
-	CollegeCode    string `json:"collegeCode"`
-	CollegeName    string `json:"collegeName"`
-	IsPublic       bool   `json:"isPublic"`
-	CreatedAt      string `json:"createdAt"`
+	ID               uint   `json:"id"`
+	Name             string `json:"name"`
+	Email            string `json:"email"`
+	StudentID        string `json:"studentId"`
+	ProfilePicture   string `json:"profilePicture"`
+	Bio              string `json:"bio"`
+	Department       string `json:"department"`
+	Semester         int    `json:"semester"`
+	CollegeCode      string `json:"collegeCode"`
+	CollegeName      string `json:"collegeName"`
+	IsPublic         bool   `json:"isPublic"`
+	CreatedAt        string `json:"createdAt"`
+	FriendshipStatus string `json:"friendshipStatus"`
 }
 
 // UpdateProfileRequest is the payload for updating profile
@@ -215,59 +216,75 @@ func SearchDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get query parameters
-	searchQuery := r.URL.Query().Get("q")         // Search term
-	department := r.URL.Query().Get("department") // Filter by department
-	semesterStr := r.URL.Query().Get("semester")  // Filter by semester
+	searchQuery := r.URL.Query().Get("q") // Search term
 
-	// Build query
-	query := db.DB.Preload("College").
-		Where("college_id = ? AND role = ? AND is_public = ? AND status = ?",
-			claims.CollegeID, "student", true, "active")
-
-	// Apply search filter
-	if searchQuery != "" {
-		searchPattern := "%" + strings.ToLower(searchQuery) + "%"
-		query = query.Where("LOWER(name) LIKE ? OR LOWER(email) LIKE ? OR student_id LIKE ?",
-			searchPattern, searchPattern, searchPattern)
+	if searchQuery == "" {
+		// Return empty list or specific message if search query is required
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"total":    0,
+			"students": []ProfileResponse{}, // Return empty list
+		})
+		// respondWithError(w, http.StatusBadRequest, "Search query 'q' is required")
+		return
 	}
 
-	// Apply department filter
-	if department != "" {
-		query = query.Where("department = ?", department)
-	}
+	// Build query - Fetch ALL active students in the college initially
+	query := db.DB.Preload("College"). // Preload College if needed for response
+						Where("college_id = ? AND role = ? AND status = ? AND id != ?", // Exclude self
+			claims.CollegeID, "student", "active", claims.UserID)
 
-	// Apply semester filter
-	if semesterStr != "" {
-		semester, err := strconv.Atoi(semesterStr)
-		if err == nil {
-			query = query.Where("semester = ?", semester)
-		}
-	}
+	// Apply search filter (name, studentId) - case-insensitive
+	searchPattern := "%" + strings.ToLower(searchQuery) + "%"
+	query = query.Where("LOWER(name) LIKE ? OR LOWER(student_id) LIKE ?",
+		searchPattern, searchPattern)
 
 	// Execute query
 	var users []models.User
-	result := query.Order("name ASC").Limit(50).Find(&users) // Limit to 50 results
+	result := query.Order("name ASC").Limit(20).Find(&users) // Limit results
 
 	if result.Error != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to search directory")
 		return
 	}
 
-	// Transform to response
+	// Get all relevant friendships involving the current user in one go for efficiency
+	var friendships []models.Friendship
+	db.DB.Where("(user_id = ? OR friend_id = ?) AND college_id = ?", claims.UserID, claims.UserID, claims.CollegeID).Find(&friendships)
+	friendshipMap := make(map[uint]string) // Key: other user's ID, Value: friendship status
+	for _, f := range friendships {
+		otherUserID := f.FriendID
+		status := f.Status
+		// Determine status relative to the current user
+		if f.FriendID == claims.UserID {
+			otherUserID = f.UserID
+			// If the current user is the 'friend', reverse 'pending' meaning
+			if status == "pending" {
+				status = "pending_received" // Current user received the request
+			}
+		} else if status == "pending" {
+			status = "pending_sent" // Current user sent the request
+		}
+		friendshipMap[otherUserID] = status
+	}
+
+	// Transform to response, including isPublic and friendshipStatus
 	var profiles []ProfileResponse
 	for _, user := range users {
+		status, found := friendshipMap[user.ID]
+		if !found {
+			status = "none" // No existing friendship record
+		}
+
 		profiles = append(profiles, ProfileResponse{
-			ID:             user.ID,
-			Name:           user.Name,
-			Email:          user.Email,
-			StudentID:      user.StudentID,
-			ProfilePicture: user.ProfilePicture,
-			Bio:            user.Bio,
-			Department:     user.Department,
-			Semester:       user.Semester,
-			CollegeCode:    user.College.CollegeCode,
-			CollegeName:    user.College.Name,
-			CreatedAt:      user.CreatedAt.Format("2006-01-02 15:04:05"),
+			ID:               user.ID,
+			Name:             user.Name,
+			StudentID:        user.StudentID,
+			ProfilePicture:   user.ProfilePicture,
+			Department:       user.Department, // Include fields needed for display
+			Semester:         user.Semester,   // Include fields needed for display
+			IsPublic:         user.IsPublic,   // <-- Include privacy status
+			FriendshipStatus: status,          // <-- Include friendship status
+			// Add other fields like CollegeCode, CollegeName if needed for display context
 		})
 	}
 

@@ -45,3 +45,20 @@ export const updateMyProfile = async (profileData) => {
         throw error.response?.data?.error || error.message || 'Failed to update profile';
     }
 };
+
+// Search for users within the college directory
+export const searchUsers = async (query) => {
+    if (!query || query.trim() === '') {
+        return []; // Return empty array if query is empty
+    }
+    try {
+        const config = getAuthConfig();
+        // Encode the query parameter properly
+        const response = await apiClient.get(`/api/directory?q=${encodeURIComponent(query)}`, config);
+        // Backend returns { total: ..., students: [...] }
+        return response.data.students || []; // Return students array
+    } catch (error) {
+        console.error("Error searching users:", error);
+        throw error.response?.data?.error || error.message || 'Failed to search users';
+    }
+};
