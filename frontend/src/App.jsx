@@ -1,7 +1,8 @@
-// src/App.jsx
+// src/App.jsx - MODIFIED for Unified Layout Routing
 import React from "react";
 import { Routes, Route } from "react-router-dom";
-import AppLayout from "./layouts/AppLayout"; // <-- Import layout
+import AppLayout from "./layouts/AppLayout"; // Unified layout
+// Import Pages
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -12,96 +13,81 @@ import ListingDetailPage from "./pages/ListingDetailPage";
 import FeedPage from "./pages/FeedPage";
 import Friendspage from "./pages/Friendspage";
 import ProfilePage from "./pages/ProfilePage";
-
+import ChatPage from "./pages/ChatPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
-
-import ProtectedRoute from "./components/ProtectedRoute";
-import ProtectedAdminRoute from "./components/ProtectedAdminRoute"; // <-- Import Admin Protection
-import AdminLayout from "./layouts/AdminLayout"; // <-- Import Admin Layout
+// Import Admin Pages
 import AdminDashboard from "./pages/AdminDashboard";
-
 import AdminAnnouncementsPage from "./pages/AdminAnnouncementsPage";
 import AdminStudentListPage from "./pages/AdminStudentListPage";
 import AdminMarketplacePage from "./pages/AdminMarketplacePage";
 import AdminGroupManagementPage from "./pages/AdminGroupManagementPage";
-import PlatformCollegeManagementPage from "./pages/PlatformCollegeManagementPage";
 import PlatformStatsPage from "./pages/PlatformStatsPage";
+import PlatformCollegeManagementPage from "./pages/PlatformCollegeManagementPage";
 import PlatformAdminManagementPage from "./pages/PlatformAdminManagementPage";
-import ChatPage from "./pages/ChatPage"; // <-- add this import
+// Import Route Protectors
+import ProtectedRoute from "./components/ProtectedRoute"; // General Auth check
+import ProtectedAdminRoute from "./components/ProtectedAdminRoute"; // Admin Role check
+// Removed: import AdminLayout from "./layouts/AdminLayout"; // No longer needed
+
 function App() {
   return (
     <div>
       <Routes>
-        {/* Public */}
+        {/* --- Public Routes --- */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />
-        {/* Protected */}
-        <Route element={<ProtectedRoute />}>
-          {" "}
-          {/* Authentication */}
-          <Route element={<AppLayout />}>
-            {" "}
-            {/* Layout */}
-            {/* Pages inside layout */}
+
+        {/* --- Protected Routes (All Roles - using AppLayout) --- */}
+        <Route element={<ProtectedRoute />}> {/* Checks if logged in */}
+          <Route element={<AppLayout />}> {/* Use unified layout */}
+
+            {/* == Student Specific Routes == */}
+            {/* These might need an additional role check if admins shouldn't see them */}
             <Route path="/dashboard" element={<Dashboard />} />
-            {/* Marketplace Routes */}
             <Route path="/market" element={<Marketplace />} />
             <Route path="/market/new" element={<CreateListingPage />} />
+            {/* Listing detail might be shared? Check permissions if needed */}
             <Route path="/market/:id" element={<ListingDetailPage />} />
-            {/* Feed Route */}
             <Route path="/feed" element={<FeedPage />} />
-            {/* Chat routes */}
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/chat/:conversationId" element={<ChatPage />} />
-            {/* Friends Route */}
             <Route path="/friends" element={<Friendspage />} />
-            {/* Profile Routes */}
-            <Route path="/profile/me" element={<ProfilePage />} />
-            <Route path="/profile/:id" element={<ProfilePage />} />
-            {/* Add other protected pages here */}
-          </Route>
-        </Route>
-        {/* --- PROTECTED ADMIN ROUTES --- */}
-        {/* All Admin pages use the AdminLayout and are protected by role */}
-        <Route element={<ProtectedAdminRoute requiredRole="college_admin" />}>
-          <Route element={<AdminLayout />}>
-            {/* Admin Dashboard (Accessed by both College and Platform Admins) */}
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
-            {/* College Admin Pages (will create content for these next) */}
-            <Route path="/admin/students" element={<AdminStudentListPage />} />
-            <Route
-              path="/admin/announcements"
-              element={<AdminAnnouncementsPage />}
-            />
-            <Route path="/admin/listings" element={<AdminMarketplacePage />} />
-            <Route
-              path="/admin/groups"
-              element={<AdminGroupManagementPage />}
-            />
+            {/* == Shared Routes (Profile) == */}
+            {/* Accessible by Students and Admins */}
             <Route path="/profile/me" element={<ProfilePage />} />
-          </Route>
-          
-        </Route>
-        {/* --- PROTECTED PLATFORM ADMIN ROUTES (Only accessible by Platform Admin) --- */}
-        <Route element={<ProtectedAdminRoute requiredRole="platform_admin" />}>
-          <Route element={<AdminLayout />}>
-            <Route path="/platform/stats" element={<PlatformStatsPage />} />
-            <Route
-              path="/platform/colleges"
-              element={<PlatformCollegeManagementPage />}
-            />
+            <Route path="/profile/:id" element={<ProfilePage />} /> {/* Student viewing others */}
 
-            <Route
-              path="/platform/admins"
-              element={<PlatformAdminManagementPage />}
-            />
-          </Route>
-        </Route>
-        {/* Not Found */}
-        <Route path="*" element={<h1>404 Not Found</h1>} />
+
+            {/* == Admin Routes (Nested Role Protection) == */}
+            {/* College Admin Routes */}
+            <Route element={<ProtectedAdminRoute requiredRole="college_admin" />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/students" element={<AdminStudentListPage />} />
+              <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
+              <Route path="/admin/listings" element={<AdminMarketplacePage />} />
+              <Route path="/admin/groups" element={<AdminGroupManagementPage />} />
+              {/* Note: /admin/market/:id might need a separate route if behavior differs */}
+            </Route>
+
+            {/* Platform Admin Routes */}
+            <Route element={<ProtectedAdminRoute requiredRole="platform_admin" />}>
+              <Route path="/platform/stats" element={<PlatformStatsPage />} />
+              <Route path="/platform/colleges" element={<PlatformCollegeManagementPage />} />
+              <Route path="/platform/admins" element={<PlatformAdminManagementPage />} />
+            </Route>
+
+          </Route> {/* End AppLayout */}
+        </Route> {/* End ProtectedRoute */}
+
+        {/* --- Not Found --- */}
+        {/* TODO: Create a proper Not Found page component */}
+        <Route path="*" element={<div className="p-10 text-center"><h1>404 Not Found</h1><p>The page you requested could not be found.</p></div>} />
+        {/* TODO: Create an Unauthorized page component for role mismatches */}
+        <Route path="/unauthorized" element={<div className="p-10 text-center"><h1>403 Unauthorized</h1><p>You do not have permission to access this page.</p></div>} />
+
       </Routes>
     </div>
   );
