@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"log" // <-- Ensure log is imported
 	"net/http"
 	"strconv"
+	"time"
 
 	"unilink-backend/db"
 	"unilink-backend/models"
 	"unilink-backend/utils"
+	"unilink-backend/websocket" // <-- Ensure websocket is imported
 
 	"github.com/gorilla/mux"
 )
@@ -21,7 +24,7 @@ type FriendRequestRequest struct {
 type FriendshipResponse struct {
 	ID        uint              `json:"id"`
 	Status    string            `json:"status"`
-	Friend    FriendProfileData `json:"friend"`
+	Friend    FriendProfileData `json:"friend"` // This is the SENDER when getting pending requests
 	CreatedAt string            `json:"createdAt"`
 }
 
@@ -29,7 +32,7 @@ type FriendshipResponse struct {
 type FriendProfileData struct {
 	ID             uint   `json:"id"`
 	Name           string `json:"name"`
-	Email          string `json:"email"`
+	Email          string `json:"email"` // Consider removing email if not needed on frontend for this
 	StudentID      string `json:"studentId"`
 	ProfilePicture string `json:"profilePicture"`
 	Department     string `json:"department"`
@@ -76,22 +79,39 @@ func SendFriendRequest(w http.ResponseWriter, r *http.Request) {
 		claims.UserID, req.FriendID, req.FriendID, claims.UserID).First(&existingFriendship)
 
 	if existingFriendship.ID != 0 {
+		// Existing logic for conflict checks remains...
 		if existingFriendship.Status == "accepted" {
 			respondWithError(w, http.StatusConflict, "Already friends")
 			return
 		} else if existingFriendship.Status == "pending" {
-			respondWithError(w, http.StatusConflict, "Friend request already pending")
+			// Check who sent the pending request
+			if existingFriendship.UserID == claims.UserID {
+				respondWithError(w, http.StatusConflict, "You already sent a request")
+			} else {
+				respondWithError(w, http.StatusConflict, "This user already sent you a request")
+			}
 			return
 		} else if existingFriendship.Status == "blocked" {
 			respondWithError(w, http.StatusForbidden, "Cannot send friend request")
 			return
+		} else if existingFriendship.Status == "rejected" {
+			// Allow re-sending request after rejection (or implement cooldown if desired)
+			// Decide whether to reuse the rejected record or create a new one.
+			// For simplicity here, we'll create a new one, ignoring the old rejected one.
+			// Alternatively, update the existing rejected one:
+			// existingFriendship.UserID = claims.UserID // Ensure sender is correct
+			// existingFriendship.FriendID = req.FriendID
+			// existingFriendship.Status = "pending"
+			// existingFriendship.UpdatedAt = time.Now()
+			// if err := db.DB.Save(&existingFriendship).Error; err != nil { ... }
+			// goto SendNotification // Skip creating new, jump to notify
 		}
 	}
 
 	// Create friendship
 	friendship := models.Friendship{
-		UserID:    claims.UserID,
-		FriendID:  req.FriendID,
+		UserID:    claims.UserID, // The sender (current user)
+		FriendID:  req.FriendID,  // The recipient
 		Status:    "pending",
 		CollegeID: claims.CollegeID,
 	}
@@ -100,6 +120,43 @@ func SendFriendRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to send friend request")
 		return
 	}
+
+	// --- Broadcast WebSocket Notification ---
+	// Get Hub from context
+	hub, hubOk := r.Context().Value(utils.HubKey).(*websocket.Hub)
+	if hubOk && hub != nil {
+		// Get sender details (current user)
+		var sender models.User
+		db.DB.First(&sender, claims.UserID) // Fetch minimal sender details needed
+
+		// Construct payload for the recipient
+		wsPayload := map[string]interface{}{
+			"id":       friendship.ID, // Friendship record ID
+			"type":     "newFriendRequest",
+			"userId":   friendship.UserID,   // The ID of the person who sent the request
+			"friendId": friendship.FriendID, // The ID of the person receiving the request (TARGET USER)
+			"sender": FriendProfileData{ // Include info about the sender
+				ID:             sender.ID,
+				Name:           sender.Name,
+				StudentID:      sender.StudentID,
+				ProfilePicture: sender.ProfilePicture,
+				Department:     sender.Department,
+				Semester:       sender.Semester,
+			},
+			"createdAt": friendship.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+
+		wsMsg := &websocket.WSMessage{
+			Type:    "newFriendRequest",
+			Payload: wsPayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("WS Broadcast: Sent 'newFriendRequest' notification to UserID %d", friendship.FriendID)
+
+	} else {
+		log.Printf("Warning: Hub not found in context for SendFriendRequest. HubOk: %v, HubNil: %v", hubOk, hub == nil)
+	}
+	// --- End Broadcast ---
 
 	respondWithJSON(w, http.StatusCreated, map[string]string{
 		"message": "Friend request sent successfully",
@@ -116,6 +173,7 @@ func GetPendingRequests(w http.ResponseWriter, r *http.Request) {
 
 	// Get all pending requests where current user is the friend (receiver)
 	var friendships []models.Friendship
+	// Preload the 'User' which represents the SENDER of the request
 	result := db.DB.Preload("User").
 		Where("friend_id = ? AND status = ?", claims.UserID, "pending").
 		Order("created_at DESC").
@@ -129,13 +187,14 @@ func GetPendingRequests(w http.ResponseWriter, r *http.Request) {
 	// Transform to response
 	var requests []FriendshipResponse
 	for _, f := range friendships {
+		// 'Friend' in the response should be the sender ('User' from the preload)
 		requests = append(requests, FriendshipResponse{
 			ID:     f.ID,
 			Status: f.Status,
-			Friend: FriendProfileData{
+			Friend: FriendProfileData{ // Friend here refers to the SENDER
 				ID:             f.User.ID,
 				Name:           f.User.Name,
-				Email:          f.User.Email,
+				Email:          f.User.Email, // Consider removing
 				StudentID:      f.User.StudentID,
 				ProfilePicture: f.User.ProfilePicture,
 				Department:     f.User.Department,
@@ -159,7 +218,6 @@ func AcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get friendship ID from URL
 	vars := mux.Vars(r)
 	friendshipID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -167,11 +225,15 @@ func AcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find friendship and verify it's for current user
+	// Find friendship where current user is the receiver (friend_id)
 	var friendship models.Friendship
-	result := db.DB.Where("id = ? AND friend_id = ? AND status = ?", friendshipID, claims.UserID, "pending").First(&friendship)
+	// Preload User (sender) and Friend (receiver - current user)
+	result := db.DB.Preload("User").Preload("Friend").
+		Where("id = ? AND friend_id = ? AND status = ?", friendshipID, claims.UserID, "pending").
+		First(&friendship)
+
 	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Friend request not found")
+		respondWithError(w, http.StatusNotFound, "Friend request not found or already actioned")
 		return
 	}
 
@@ -181,6 +243,38 @@ func AcceptFriendRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to accept request")
 		return
 	}
+
+	// --- Broadcast WebSocket Notification to the original sender ---
+	hub, hubOk := r.Context().Value(utils.HubKey).(*websocket.Hub)
+	if hubOk && hub != nil {
+		// Construct payload for the original sender (friendship.User)
+		wsPayload := map[string]interface{}{
+			"id":       friendship.ID,
+			"type":     "friendRequestUpdate",
+			"userId":   friendship.UserID,   // The ID of the original sender (TARGET USER)
+			"friendId": friendship.FriendID, // The ID of the user who accepted
+			"status":   "accepted",
+			"accepter": FriendProfileData{ // Include info about who accepted
+				ID:             friendship.Friend.ID,
+				Name:           friendship.Friend.Name,
+				StudentID:      friendship.Friend.StudentID,
+				ProfilePicture: friendship.Friend.ProfilePicture,
+				Department:     friendship.Friend.Department,
+				Semester:       friendship.Friend.Semester,
+			},
+			"updatedAt": friendship.UpdatedAt.Format("2006-01-02 15:04:05"),
+		}
+
+		wsMsg := &websocket.WSMessage{
+			Type:    "friendRequestUpdate",
+			Payload: wsPayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("WS Broadcast: Sent 'friendRequestUpdate' (accepted) notification to UserID %d", friendship.UserID)
+	} else {
+		log.Printf("Warning: Hub not found in context for AcceptFriendRequest. HubOk: %v, HubNil: %v", hubOk, hub == nil)
+	}
+	// --- End Broadcast ---
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Friend request accepted",
@@ -195,7 +289,6 @@ func RejectFriendRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get friendship ID from URL
 	vars := mux.Vars(r)
 	friendshipID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -203,20 +296,53 @@ func RejectFriendRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find friendship and verify it's for current user
+	// Find friendship where current user is the receiver
 	var friendship models.Friendship
-	result := db.DB.Where("id = ? AND friend_id = ? AND status = ?", friendshipID, claims.UserID, "pending").First(&friendship)
+	// Preload User (sender) only needed for notification
+	result := db.DB.Preload("User").
+		Where("id = ? AND friend_id = ? AND status = ?", friendshipID, claims.UserID, "pending").
+		First(&friendship)
+
 	if result.Error != nil {
-		respondWithError(w, http.StatusNotFound, "Friend request not found")
+		respondWithError(w, http.StatusNotFound, "Friend request not found or already actioned")
 		return
 	}
 
 	// Update status to rejected
+	// Option 1: Update status (keeps record, allows re-sending later maybe)
 	friendship.Status = "rejected"
 	if err := db.DB.Save(&friendship).Error; err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to reject request")
 		return
 	}
+
+	// Option 2: Delete the request entirely (simpler, but loses history)
+	// if err := db.DB.Delete(&friendship).Error; err != nil { ... }
+
+	// --- Broadcast WebSocket Notification to the original sender ---
+	hub, hubOk := r.Context().Value(utils.HubKey).(*websocket.Hub)
+	if hubOk && hub != nil {
+		// Construct payload for the original sender (friendship.User)
+		wsPayload := map[string]interface{}{
+			"id":         friendship.ID,
+			"type":       "friendRequestUpdate",
+			"userId":     friendship.UserID,   // The ID of the original sender (TARGET USER)
+			"friendId":   friendship.FriendID, // The ID of the user who rejected
+			"status":     "rejected",
+			"rejecterId": friendship.FriendID, // ID of who rejected
+			"updatedAt":  friendship.UpdatedAt.Format("2006-01-02 15:04:05"),
+		}
+
+		wsMsg := &websocket.WSMessage{
+			Type:    "friendRequestUpdate",
+			Payload: wsPayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("WS Broadcast: Sent 'friendRequestUpdate' (rejected) notification to UserID %d", friendship.UserID)
+	} else {
+		log.Printf("Warning: Hub not found in context for RejectFriendRequest. HubOk: %v, HubNil: %v", hubOk, hub == nil)
+	}
+	// --- End Broadcast ---
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Friend request rejected",
@@ -257,7 +383,7 @@ func GetFriends(w http.ResponseWriter, r *http.Request) {
 		friends = append(friends, FriendProfileData{
 			ID:             friendUser.ID,
 			Name:           friendUser.Name,
-			Email:          friendUser.Email,
+			Email:          friendUser.Email, // Consider removing
 			StudentID:      friendUser.StudentID,
 			ProfilePicture: friendUser.ProfilePicture,
 			Department:     friendUser.Department,
@@ -279,7 +405,6 @@ func RemoveFriend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get friend user ID from URL
 	vars := mux.Vars(r)
 	friendUserID, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -287,20 +412,62 @@ func RemoveFriend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find and delete friendship (in either direction)
-	result := db.DB.Where("((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = ?",
+	// Find the friendship record to know who was who (needed for potential notification)
+	var friendship models.Friendship
+	findResult := db.DB.Where("((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)) AND status = ?",
 		claims.UserID, friendUserID, friendUserID, claims.UserID, "accepted").
-		Delete(&models.Friendship{})
+		First(&friendship)
 
-	if result.Error != nil || result.RowsAffected == 0 {
+	if findResult.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Friendship not found")
 		return
 	}
+
+	// Delete the friendship record
+	deleteResult := db.DB.Delete(&friendship)
+	if deleteResult.Error != nil || deleteResult.RowsAffected == 0 {
+		// Should not happen if findResult succeeded, but check anyway
+		respondWithError(w, http.StatusInternalServerError, "Failed to remove friend")
+		return
+	}
+
+	// --- Broadcast WebSocket Notification to the *removed* friend ---
+	hub, hubOk := r.Context().Value(utils.HubKey).(*websocket.Hub)
+	if hubOk && hub != nil {
+		// *** FIX: Fetch the remover's details (current user) to get their name ***
+		var removerUser models.User
+		db.DB.Select("name").First(&removerUser, claims.UserID) // Only select the name
+
+		// The target is the other user involved in the friendship
+		targetUserID := uint(friendUserID)
+
+		// Construct payload for the removed friend
+		wsPayload := map[string]interface{}{
+			"id":          friendship.ID,    // ID of the friendship record that was deleted
+			"type":        "friendRemoved",  // New type
+			"removedById": claims.UserID,    // ID of the user who initiated the removal
+			"removedUser": targetUserID,     // ID of the user who was removed (TARGET USER)
+			"removerName": removerUser.Name, // *** FIX: Use fetched name ***
+			"updatedAt":   time.Now().Format("2006-01-02 15:04:05"),
+		}
+
+		wsMsg := &websocket.WSMessage{
+			Type:    "friendRemoved", // Match payload type
+			Payload: wsPayload,
+		}
+		hub.BroadcastJSON(wsMsg)
+		log.Printf("WS Broadcast: Sent 'friendRemoved' notification to UserID %d", targetUserID)
+	} else {
+		log.Printf("Warning: Hub not found in context for RemoveFriend. HubOk: %v, HubNil: %v", hubOk, hub == nil)
+	}
+	// --- End Broadcast ---
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "Friend removed successfully",
 	})
 }
+
+// ... (rest of the file remains the same) ...
 
 // GetFriendSuggestions returns students from same department/semester (potential friends)
 func GetFriendSuggestions(w http.ResponseWriter, r *http.Request) {
@@ -310,17 +477,15 @@ func GetFriendSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current user's info
 	var currentUser models.User
 	db.DB.First(&currentUser, claims.UserID)
 
-	// Get existing friend IDs (to exclude them)
-	var friendships []models.Friendship
-	db.DB.Where("(user_id = ? OR friend_id = ?) AND status = ?", claims.UserID, claims.UserID, "accepted").
-		Find(&friendships)
+	// Get IDs of users involved in *any* friendship status with the current user
+	var existingRelations []models.Friendship
+	db.DB.Where("user_id = ? OR friend_id = ?", claims.UserID, claims.UserID).Find(&existingRelations)
 
 	excludeIDs := []uint{claims.UserID} // Exclude self
-	for _, f := range friendships {
+	for _, f := range existingRelations {
 		if f.UserID == claims.UserID {
 			excludeIDs = append(excludeIDs, f.FriendID)
 		} else {
@@ -328,10 +493,13 @@ func GetFriendSuggestions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Find students from same department and semester, not already friends
+	// Find students from same department OR same semester (broader suggestions)
+	// Exclude those already related (pending, accepted, rejected, blocked)
 	var suggestions []models.User
-	db.DB.Where("college_id = ? AND role = ? AND department = ? AND semester = ? AND id NOT IN ?",
-		claims.CollegeID, "student", currentUser.Department, currentUser.Semester, excludeIDs).
+	db.DB.Where("college_id = ? AND role = ? AND id NOT IN ? AND (department = ? OR semester = ?)",
+		claims.CollegeID, "student", excludeIDs, currentUser.Department, currentUser.Semester).
+		// Optionally order by something relevant, e.g., name or randomly
+		Order("name ASC").
 		Limit(20).
 		Find(&suggestions)
 
@@ -341,7 +509,7 @@ func GetFriendSuggestions(w http.ResponseWriter, r *http.Request) {
 		response = append(response, FriendProfileData{
 			ID:             user.ID,
 			Name:           user.Name,
-			Email:          user.Email,
+			Email:          user.Email, // Consider removing
 			StudentID:      user.StudentID,
 			ProfilePicture: user.ProfilePicture,
 			Department:     user.Department,

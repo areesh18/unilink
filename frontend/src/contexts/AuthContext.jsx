@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { loginAdminApi } from '../api/admin';
 import { fetchConversations } from '../api/messages';
+import { fetchPendingRequests } from '../api/friends'; // Import API to fetch requests count
 
 // Create the context AND EXPORT IT
 export const AuthContext = createContext(null);
@@ -52,6 +53,10 @@ export const AuthProvider = ({ children }) => {
   const [hasUnreadAnnouncements, setHasUnreadAnnouncements] = useState(false);
   // --- End Unread Announcements State ---
 
+  // --- Friend Request Count State --- // <-- NEW
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  // --- End Friend Request Count State --- // <-- NEW
+
   // Ref to store the current user ID
   const currentUserIdRef = useRef(null);
   useEffect(() => {
@@ -83,9 +88,31 @@ export const AuthProvider = ({ children }) => {
   }, []);
   // --- End Function to mark announcements as read ---
 
+  // --- Function to fetch and update friend request count --- // <-- NEW
+  const fetchAndUpdateRequestCount = useCallback(async () => {
+    if (!localStorage.getItem('authToken')) {
+      setPendingRequestCount(0);
+      return;
+    }
+    console.log("Attempting to fetch and update friend request count...");
+    try {
+      // Assuming fetchPendingRequests returns an array of request objects
+      const requestsData = await fetchPendingRequests();
+      const count = requestsData.length;
+      console.log("Pending friend request count calculated:", count);
+      setPendingRequestCount(count);
+    } catch (error) {
+      console.error("Failed to fetch pending requests for count:", error);
+      // Optionally set count to 0 or leave it as is on error
+      // setPendingRequestCount(0);
+    }
+  }, []);
+  // --- End Friend Request Count Function --- // <-- NEW
+
 
   // --- WebSocket Connection Logic ---
   const connectWebSocket = useCallback((authToken) => {
+    // ... (keep existing connection setup logic) ...
     if (!authToken || wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       console.log(`WebSocket connect aborted: No token or already ${wsRef.current?.readyState === WebSocket.OPEN ? 'connected' : 'connecting'}.`);
       return;
@@ -122,78 +149,111 @@ export const AuthProvider = ({ children }) => {
             console.log('WebSocket message received:', message);
 
             const currentUserId = currentUserIdRef.current;
-            const senderId = message.payload?.sender?.id;
-            console.log(`WS Message Check: currentUserId=${currentUserId}, senderId=${senderId}, type=${message.type}`);
-            const isValidSenderId = typeof senderId === 'number';
-            const isValidCurrentUserId = typeof currentUserId === 'number';
+            const payload = message.payload || {}; // Ensure payload exists
 
-            let shouldIncrementCount = false; // <-- Flag to determine increment after checks
-
-            // --- Handle Notifications & Unread Counts ---
-            if (message.type === 'newMessage') {
-                const messageId = message.payload?.id;
-                // Check if it's a message from ANOTHER user
-                if (isValidSenderId && isValidCurrentUserId && senderId !== currentUserId) {
-                    shouldIncrementCount = true; // Mark to potentially increment count
-                    // Handle notification addition using functional update
-                    setNotifications((prevNots) => {
-                        const notificationExists = prevNots.some(n => n.messageId === messageId);
-                        if (!notificationExists) {
-                            console.log(`Adding 'newMessage' notification for msg ID ${messageId}`);
-                            const newNotification = {
-                                id: Date.now() + Math.random(), messageId: messageId, type: 'message',
-                                message: `New message from ${message.payload.sender.name || 'someone'}`,
-                            };
-                            return [newNotification, ...prevNots].slice(0, 5);
-                        } else {
-                            console.log(`Duplicate 'newMessage' notification skipped for msg ID ${messageId}`);
-                            shouldIncrementCount = false; // Don't increment count if notification is a duplicate
-                            return prevNots;
-                        }
-                    });
-                } else if (senderId === currentUserId) {
-                     console.log("WS Message is from self, skipping notification and count increment.");
-                     shouldIncrementCount = false; // Explicitly ensure no increment
-                } else {
-                    console.warn("WS Message 'newMessage' received, but sender or current user ID is invalid/missing. Skipping count/notification.");
-                    shouldIncrementCount = false; // Ensure no increment on invalid data
-                }
-
-                // --- Perform count increment AFTER notification logic --- // <-- MOVED INCREMENT
-                if (shouldIncrementCount) {
-                     setTotalUnreadCount(prevCount => {
-                         console.log(`Incrementing unread count from ${prevCount} for received message`);
-                         return prevCount + 1;
-                     });
-                 }
-
-            } else if (message.type === 'newAnnouncement') {
-                 // Announcement logic (remains the same)
-                 const announcementId = message.payload?.id;
+            // Helper to add notification safely
+            const addNotification = (newNotificationData) => {
                  setNotifications((prevNots) => {
-                    const notificationExists = prevNots.some(n => n.announcementId === announcementId);
-                     if (!notificationExists) {
-                        console.log(`Adding 'newAnnouncement' notification for ann ID ${announcementId}`);
-                        const newNotification = {
-                            id: Date.now() + Math.random(), announcementId: announcementId, type: 'announcement',
-                            message: `New Announcement: ${message.payload.title || 'Check the feed!'}`,
-                        };
-                        setHasUnreadAnnouncements(true);
-                        console.log("AuthContext: setHasUnreadAnnouncements called with true");
-                        return [newNotification, ...prevNots].slice(0, 5);
-                     } else {
-                        console.log(`Duplicate 'newAnnouncement' notification skipped for ann ID ${announcementId}`);
-                        return prevNots;
-                     }
+                    const uniqueId = Date.now() + Math.random(); // Simple unique ID
+                    // Optionally add checks to prevent duplicate notifications based on content/IDs
+                    console.log(`Adding notification: Type=${newNotificationData.type}, Msg=${newNotificationData.message}`);
+                    return [{ id: uniqueId, ...newNotificationData }, ...prevNots].slice(0, 5); // Keep max 5
                  });
+            };
+
+            // --- Handle Notifications & State Updates ---
+            switch (message.type) {
+                case 'newMessage':
+                    const senderIdMsg = payload.sender?.id;
+                    const isValidSenderIdMsg = typeof senderIdMsg === 'number';
+                    const isValidCurrentUserIdMsg = typeof currentUserId === 'number';
+
+                    if (isValidSenderIdMsg && isValidCurrentUserIdMsg && senderIdMsg !== currentUserId) {
+                        setTotalUnreadCount(prevCount => prevCount + 1); // Increment unread count
+                        addNotification({
+                            type: 'message',
+                            messageId: payload.id, // Store message ID if needed later
+                            message: `New message from ${payload.sender.name || 'someone'}`,
+                        });
+                    } else if (senderIdMsg === currentUserId) {
+                         console.log("WS 'newMessage' is from self, skipping notification and count increment.");
+                    } else {
+                        console.warn("WS 'newMessage' received, but sender or current user ID is invalid/missing.");
+                    }
+                    break;
+
+                case 'newAnnouncement':
+                    setHasUnreadAnnouncements(true);
+                    console.log("AuthContext: setHasUnreadAnnouncements called with true");
+                    addNotification({
+                        type: 'announcement',
+                        announcementId: payload.id,
+                        message: `New Announcement: ${payload.title || 'Check the feed!'}`,
+                    });
+                    break;
+
+                // --- Handle Friend Request Events --- // <-- NEW
+                case 'newFriendRequest':
+                    // This message is for the recipient (payload.friendId)
+                    if (payload.friendId === currentUserId) {
+                        setPendingRequestCount(prev => prev + 1); // Increment count
+                        addNotification({
+                            type: 'friend_request_received', // Specific type
+                            friendshipId: payload.id,
+                            senderId: payload.sender?.id,
+                            message: `New friend request from ${payload.sender?.name || 'Someone'}`,
+                        });
+                    }
+                    break;
+
+                case 'friendRequestUpdate':
+                    // This message is for the original sender (payload.userId)
+                    if (payload.userId === currentUserId) {
+                        if (payload.status === 'accepted') {
+                            fetchAndUpdateRequestCount(); // Re-fetch count if needed (though this doesn't change *received* count)
+                            addNotification({
+                                type: 'friend_request_accepted', // Specific type
+                                friendshipId: payload.id,
+                                accepterId: payload.accepter?.id,
+                                message: `${payload.accepter?.name || 'Someone'} accepted your friend request!`,
+                            });
+                            // Optionally trigger a friend list refresh here or let Friendspage handle it
+                        } else if (payload.status === 'rejected') {
+                             fetchAndUpdateRequestCount(); // Re-fetch count
+                             addNotification({
+                                type: 'friend_request_rejected', // Specific type
+                                friendshipId: payload.id,
+                                rejecterId: payload.rejecterId,
+                                message: `Your friend request was rejected.`, // Keep it simple
+                            });
+                        }
+                    }
+                    break;
+
+                 case 'friendRemoved':
+                     // This message is for the user who was removed (payload.removedUser)
+                     if (payload.removedUser === currentUserId) {
+                         addNotification({
+                             type: 'friend_removed', // Specific type
+                             friendshipId: payload.id, // ID of the removed relationship
+                             removerId: payload.removedById,
+                             message: `${payload.removerName || 'Someone'} removed you as a friend.`,
+                         });
+                         // Optionally trigger a friend list refresh
+                     }
+                     break;
+                 // --- End Friend Request Event Handling --- // <-- NEW
+
+                default:
+                    console.log("Received unhandled WebSocket message type:", message.type);
             }
-            // --- End Handle Notifications & Unread Counts ---
+            // --- End Notifications & State Updates ---
 
             // --- Notify component listeners ---
-            messageListenersRef.current.forEach(listener => listener(message)); // Pass only message
+            messageListenersRef.current.forEach(listener => listener(message));
             // --- End Notify listeners ---
         } catch (error) {
-            console.error('Failed to parse WebSocket message:', error);
+            console.error('Failed to parse or handle WebSocket message:', error);
         }
     }; // --- End of onmessage assignment ---
 
@@ -220,8 +280,8 @@ export const AuthProvider = ({ children }) => {
           }, 5000);
       }
     };
-  // Removed notifications dependency
-  }, [removeNotification]);
+  // Removed notifications dependency, added fetchAndUpdateRequestCount
+  }, [removeNotification, fetchAndUpdateRequestCount]); // <-- MODIFIED Dependency Array
 
   const disconnectWebSocket = useCallback(() => {
     // ... (keep as is) ...
@@ -245,18 +305,18 @@ export const AuthProvider = ({ children }) => {
   }, []);
   // --- End WebSocket Connection Logic ---
 
-  // --- Function to fetch and update total unread count ---
+  // --- Function to fetch and update total unread message count ---
   const fetchAndUpdateUnreadCount = useCallback(async () => {
     // ... (keep as is) ...
     if (!localStorage.getItem('authToken')) {
         setTotalUnreadCount(0);
         return;
     }
-    console.log("Attempting to fetch and update unread count...");
+    console.log("Attempting to fetch and update unread message count...");
     try {
       const conversationsData = await fetchConversations();
       const totalCount = conversationsData.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
-      console.log("Total unread count calculated:", totalCount);
+      console.log("Total unread message count calculated:", totalCount);
       setTotalUnreadCount(totalCount);
     } catch (error) {
       console.error("Failed to fetch conversations for unread count:", error);
@@ -265,9 +325,9 @@ export const AuthProvider = ({ children }) => {
   // --- End Unread Count Function ---
 
 
-  // Load initial state from localStorage (keep as is)
+  // Load initial state from localStorage
   useEffect(() => {
-    // ... (keep as is) ...
+    // ... (keep existing token/user loading logic) ...
     let initialToken = null;
     let initialUser = null;
     try {
@@ -289,18 +349,21 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(false);
       if (initialToken && initialUser) {
           connectWebSocket(initialToken);
-          fetchAndUpdateUnreadCount();
+          fetchAndUpdateUnreadCount(); // Fetch message count
+          fetchAndUpdateRequestCount(); // <-- Fetch request count on initial load
       } else {
           setTotalUnreadCount(0);
+          setPendingRequestCount(0); // <-- Reset request count
       }
     }
+    // Added fetchAndUpdateRequestCount dependency
     return () => disconnectWebSocket();
-  }, [connectWebSocket, disconnectWebSocket, fetchAndUpdateUnreadCount]);
+  }, [connectWebSocket, disconnectWebSocket, fetchAndUpdateUnreadCount, fetchAndUpdateRequestCount]); // <-- MODIFIED Dependency Array
 
 
-  // Login function (keep as is)
+  // Login function
   const login = async (credentials, loginType = 'student') => {
-    // ... (keep as is) ...
+    // ... (keep existing login logic) ...
     let data;
     if (loginType === 'admin') {
       if (!credentials.email || !credentials.password) {
@@ -320,11 +383,12 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('authToken', data.token);
     localStorage.setItem('userData', JSON.stringify(data.user));
 
-    disconnectWebSocket();
-    connectWebSocket(data.token);
-    fetchAndUpdateUnreadCount();
+    disconnectWebSocket(); // Disconnect any previous WS
+    connectWebSocket(data.token); // Connect new WS
+    fetchAndUpdateUnreadCount(); // Fetch message count
+    fetchAndUpdateRequestCount(); // <-- Fetch request count on login
 
-
+    // Navigation logic remains
     if (data.user.role === 'college_admin' || data.user.role === 'platform_admin') {
       navigate('/admin/dashboard');
     } else {
@@ -332,9 +396,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout function (keep as is)
+  // Logout function
   const logout = () => {
-    // ... (keep as is) ...
+    // ... (keep existing logout logic) ...
     disconnectWebSocket();
 
     setUser(null);
@@ -343,6 +407,7 @@ export const AuthProvider = ({ children }) => {
     setNotifications([]);
     setTotalUnreadCount(0);
     setHasUnreadAnnouncements(false);
+    setPendingRequestCount(0); // <-- Reset request count on logout
     localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
     navigate('/login');
@@ -361,7 +426,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Context value (keep as is)
+  // Context value - add friend request count state and updater
   const value = {
     user,
     token,
@@ -382,11 +447,15 @@ export const AuthProvider = ({ children }) => {
     // --- Unread Announcements Context ---
     hasUnreadAnnouncements,
     markAnnouncementsRead,
+    // --- Friend Request Context --- // <-- NEW
+    pendingRequestCount,
+    fetchAndUpdateRequestCount,
+    // --- End Friend Request Context --- // <-- NEW
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!isLoading ? children : <div>Loading App...</div>}
+      {!isLoading ? children : <div>Loading App...</div>} {/* Simple loading indicator */}
     </AuthContext.Provider>
   );
 };

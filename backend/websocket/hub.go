@@ -6,7 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sync"
+	"sync" // Ensure sync is imported
 	"unilink-backend/db"
 	"unilink-backend/models"
 	// Assuming models are accessible
@@ -14,7 +14,7 @@ import (
 
 // Message structure for WebSocket communication
 type WSMessage struct {
-	Type    string      `json:"type"` // e.g., "newMessage", "newAnnouncement", "error"
+	Type    string      `json:"type"` // e.g., "newMessage", "newAnnouncement", "error", "newFriendRequest", "friendRequestUpdate"
 	Payload interface{} `json:"payload"`
 }
 
@@ -37,7 +37,7 @@ type Hub struct {
 	broadcast  chan []byte  // Inbound messages from the handlers
 	register   chan *Client // Register requests from clients.
 	unregister chan *Client // Unregister requests from clients.
-	mu         sync.RWMutex // Mutex to protect concurrent access to clients map
+	mu         sync.RWMutex // *** FIX: Corrected typo from RWMuxex to RWMutex ***
 }
 
 // NewHub creates a new Hub instance.
@@ -67,9 +67,9 @@ func (h *Hub) Run() {
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if userClients, ok := h.clients[client.userID]; ok {
-				if _, ok := userClients[client]; ok {
+				if _, clientExists := userClients[client]; clientExists { // Check if client pointer exists before closing/deleting
+					close(client.send) // Close the channel *before* deleting
 					delete(userClients, client)
-					close(client.send)
 					if len(userClients) == 0 {
 						delete(h.clients, client.userID)
 					}
@@ -86,17 +86,44 @@ func (h *Hub) Run() {
 				continue
 			}
 
+			log.Printf("DEBUG: Hub received broadcast message: Type %s", msg.Type) // Added log
+
 			h.mu.RLock() // Use RLock for reading clients map
 			switch msg.Type {
 			case "newMessage":
 				// Target specific users based on message payload (e.g., conversationID)
 				if chatMsg, ok := msg.Payload.(map[string]interface{}); ok {
 					h.handleChatMessage(chatMsg, messageBytes)
+				} else {
+					log.Printf("Error: newMessage payload is not map[string]interface{}: %T", msg.Payload)
 				}
 			case "newAnnouncement":
 				// Target users based on announcement criteria
 				if ann, ok := msg.Payload.(map[string]interface{}); ok {
 					h.handleAnnouncement(ann, messageBytes)
+				} else {
+					log.Printf("Error: newAnnouncement payload is not map[string]interface{}: %T", msg.Payload)
+				}
+			case "newFriendRequest": // *** NEW CASE ***
+				// Target the recipient of the friend request
+				if payload, ok := msg.Payload.(map[string]interface{}); ok {
+					h.handleDirectNotification(payload, messageBytes, "friendId", msg.Type) // Pass type for logging
+				} else {
+					log.Printf("Error: newFriendRequest payload is not map[string]interface{}: %T", msg.Payload)
+				}
+			case "friendRequestUpdate": // *** NEW CASE ***
+				// Target the original sender of the request about the update (accept/reject)
+				if payload, ok := msg.Payload.(map[string]interface{}); ok {
+					h.handleDirectNotification(payload, messageBytes, "userId", msg.Type) // Pass type for logging
+				} else {
+					log.Printf("Error: friendRequestUpdate payload is not map[string]interface{}: %T", msg.Payload)
+				}
+			case "friendRemoved": // *** NEW CASE ***
+				// Target the user who was removed
+				if payload, ok := msg.Payload.(map[string]interface{}); ok {
+					h.handleDirectNotification(payload, messageBytes, "removedUser", msg.Type) // Pass type for logging
+				} else {
+					log.Printf("Error: friendRemoved payload is not map[string]interface{}: %T", msg.Payload)
 				}
 			default:
 				log.Printf("Unknown broadcast message type: %s", msg.Type)
@@ -107,14 +134,19 @@ func (h *Hub) Run() {
 	}
 }
 
-// --- Helper methods for Hub (to be filled in) ---
+// --- Helper methods for Hub ---
 
 // handleChatMessage determines recipients for a chat message and sends it.
-// Needs access to message details (ConversationID, SenderID, ReceiverID, GroupID)
 // RLock is already held by Run() when this is called
 func (h *Hub) handleChatMessage(payload map[string]interface{}, messageBytes []byte) {
 	conversationID, convOk := payload["conversationId"].(string)
-	senderIDFloat, senderOk := payload["sender"].(map[string]interface{})["id"].(float64)
+
+	senderPayload, senderPayloadOk := payload["sender"].(map[string]interface{})
+	if !senderPayloadOk {
+		log.Printf("Error: Could not parse sender payload from chat message: %+v", payload)
+		return
+	}
+	senderIDFloat, senderOk := senderPayload["id"].(float64)
 	senderID := uint(senderIDFloat)
 
 	if !convOk || !senderOk {
@@ -127,10 +159,7 @@ func (h *Hub) handleChatMessage(payload map[string]interface{}, messageBytes []b
 	// --- TARGETING LOGIC ---
 	recipientIDs := make(map[uint]bool) // Use a map to avoid duplicate sends to the same user ID
 
-	// 1. Always include the sender (so they see their own message)
-	recipientIDs[senderID] = true
-
-	// 2. Determine other recipients based on conversation type
+	// 1. Determine recipients based on conversation type
 	if strings.HasPrefix(conversationID, "dm_") {
 		// Direct Message: dm_{userID1}_{userID2}
 		parts := strings.Split(conversationID, "_")
@@ -155,11 +184,12 @@ func (h *Hub) handleChatMessage(payload map[string]interface{}, messageBytes []b
 		if len(parts) == 2 {
 			groupID, err := strconv.ParseUint(parts[1], 10, 64)
 			if err == nil {
-				// Fetch group members from DB (Consider caching this later for performance)
+				// Fetch group members from DB
 				var members []models.GroupMember
-				db.DB.Where("group_id = ?", uint(groupID)).Find(&members)
+				// Exclude the sender
+				db.DB.Where("group_id = ? AND user_id != ?", uint(groupID), senderID).Find(&members)
 				for _, member := range members {
-					recipientIDs[member.UserID] = true // Add all members
+					recipientIDs[member.UserID] = true // Add all *other* members
 				}
 			} else {
 				log.Printf("Error: Invalid Group ID in conversation ID: %s", conversationID)
@@ -167,25 +197,20 @@ func (h *Hub) handleChatMessage(payload map[string]interface{}, messageBytes []b
 		} else {
 			log.Printf("Error: Invalid Group conversation ID format: %s", conversationID)
 		}
+	} else {
+		log.Printf("Error: Unrecognized conversation ID format for chat message: %s", conversationID)
+		return // Don't proceed if format is wrong
 	}
 
-	// 3. Send the message to all clients associated with the recipient User IDs
-	log.Printf("Broadcasting message for conv %s to user IDs: %v", conversationID, recipientIDs)
+	// 2. Send the message to all clients associated with the recipient User IDs
+	log.Printf("Broadcasting message for conv %s from %d to user IDs: %v", conversationID, senderID, recipientIDs)
 	for userID := range recipientIDs {
-		if userClients, userOnline := h.clients[userID]; userOnline {
-			for client := range userClients {
-				client.sendMessage(messageBytes) // Use the safe send helper
-			}
-		} else {
-			// Optional: Log if a target user is offline
-			// log.Printf("User %d is offline for conversation %s", userID, conversationID)
-		}
+		h.sendToUser(userID, messageBytes) // Use helper
 	}
 	// --- END TARGETING LOGIC ---
 }
 
 // handleAnnouncement determines recipients based on targeting and sends it.
-// Needs access to announcement details (CollegeID, Department, Semester)
 // RLock is already held by Run() when this is called
 func (h *Hub) handleAnnouncement(payload map[string]interface{}, messageBytes []byte) {
 	targetCollegeIDFloat, _ := payload["collegeId"].(float64)
@@ -196,8 +221,8 @@ func (h *Hub) handleAnnouncement(payload map[string]interface{}, messageBytes []
 	// Convert department payload if it's not nil
 	var targetDept *string
 	if deptOk && targetDeptPayload != nil {
-		if deptStr, okStr := targetDeptPayload.(string); okStr {
-			targetDept = &deptStr // Assign address if it's a non-nil string
+		if deptStr, okStr := targetDeptPayload.(string); okStr && deptStr != "" { // Check for non-empty string
+			targetDept = &deptStr // Assign address if it's a non-nil, non-empty string
 		}
 	}
 
@@ -207,14 +232,18 @@ func (h *Hub) handleAnnouncement(payload map[string]interface{}, messageBytes []
 		// JSON numbers often unmarshal as float64
 		if semFloat, okFloat := targetSemPayload.(float64); okFloat {
 			semInt := int(semFloat)
-			targetSem = &semInt // Assign address if it's a non-nil number
+			if semInt > 0 { // Ensure semester is positive
+				targetSem = &semInt // Assign address if it's a non-nil, positive number
+			}
 		}
 	}
 
 	log.Printf("Handling announcement for College %d (Dept: %v, Sem: %v)",
 		targetCollegeID, targetDept, targetSem) // Use converted pointers
 
-	for _, userClients := range h.clients {
+	sentCount := 0
+	// Iterate through all connected clients directly
+	for _, userClients := range h.clients { // *** FIX: iterate over userID map value (userClients) ***
 		for client := range userClients {
 			// Match College
 			if client.collegeID != targetCollegeID {
@@ -230,18 +259,88 @@ func (h *Hub) handleAnnouncement(payload map[string]interface{}, messageBytes []
 			}
 			// If all checks pass, send the message
 			client.sendMessage(messageBytes)
+			sentCount++
+			// Since multiple clients per user can exist, we only need to log once per user if needed
+			// But sending to all clients of the user is correct.
 		}
+		// Log after checking all clients for a user
+		// log.Printf("Sent announcement to user %d", userID) // userID is not available here easily, log count instead
+	}
+	log.Printf("Finished broadcasting announcement. Sent to %d clients.", sentCount)
+
+}
+
+// *** NEW HELPER ***
+// handleDirectNotification sends a message to a single target user ID specified in the payload.
+// RLock is already held by Run() when this is called
+func (h *Hub) handleDirectNotification(payload map[string]interface{}, messageBytes []byte, targetUserIDKey string, messageType string) {
+	targetUserIDFloat, ok := payload[targetUserIDKey].(float64) // JSON numbers are float64
+	if !ok {
+		// Attempt to parse if it might be an integer (though less likely from JSON)
+		targetUserIDInt, okInt := payload[targetUserIDKey].(int)
+		if okInt {
+			targetUserIDFloat = float64(targetUserIDInt)
+			ok = true
+		} else {
+			log.Printf("Error: Could not parse target user ID from key '%s' (type %T) in payload for %s: %+v", targetUserIDKey, payload[targetUserIDKey], messageType, payload)
+			return
+		}
+	}
+	targetUserID := uint(targetUserIDFloat)
+	if targetUserID == 0 {
+		log.Printf("Error: Target user ID is zero for key '%s' in payload for %s.", targetUserIDKey, messageType)
+		return
+	}
+
+	log.Printf("Handling direct notification type '%s' targeted at UserID %d", messageType, targetUserID)
+	h.sendToUser(targetUserID, messageBytes)
+}
+
+// *** NEW HELPER ***
+// sendToUser safely sends a message to all connected clients for a specific user ID.
+// Assumes RLock is held by the caller (Run method).
+func (h *Hub) sendToUser(userID uint, messageBytes []byte) {
+	if userClients, userOnline := h.clients[userID]; userOnline {
+		clientCount := 0
+		for client := range userClients {
+			client.sendMessage(messageBytes) // Use the safe send helper
+			clientCount++
+		}
+		log.Printf("Sent message to %d client(s) for UserID %d", clientCount, userID) // Log count
+	} else {
+		// Optional: Log if a target user is offline
+		// log.Printf("User %d is offline, message not sent in real-time.", userID)
 	}
 }
 
 // sendMessage is a helper for safely sending messages to a client's channel
 func (c *Client) sendMessage(message []byte) {
+	// Add a check to ensure the channel is not closed before sending
+	// This helps prevent panics if unregister happens concurrently
+	defer func() {
+		if r := recover(); r != nil {
+			// This might happen if the channel was closed between the check and the send.
+			log.Printf("Recovered from panic in sendMessage (UserID: %d): %v. Likely channel closed.", c.userID, r)
+			// Consider triggering unregister again if necessary, but be cautious of loops.
+			// c.hub.unregister <- c // Maybe not needed if unregister is robust
+		}
+	}()
+
+	// Use select to send with a default case to handle full/closed channels
 	select {
 	case c.send <- message:
+		// Message sent successfully or buffered
 	default:
-		// If channel is full or closed, assume client is gone/slow
-		log.Printf("Send channel blocked/closed for UserID %d, unregistering client.", c.userID)
-		c.hub.unregister <- c // Request unregistration
+		// If channel is full or potentially closed
+		log.Printf("Send channel blocked/closed for UserID %d during send attempt, requesting unregister.", c.userID)
+		// Non-blocking send to unregister channel. If unregister is also blocked, this might fail,
+		// but readPump/writePump closure should eventually trigger unregister.
+		select {
+		case c.hub.unregister <- c:
+			log.Printf("Requested unregister for UserID %d due to blocked send.", c.userID)
+		default:
+			log.Printf("Unregister channel blocked for UserID %d during sendMessage.", c.userID)
+		}
 	}
 }
 
@@ -253,11 +352,12 @@ func (h *Hub) BroadcastJSON(message *WSMessage) {
 		return
 	}
 	// Send the marshalled bytes to the broadcast channel
-	// Use a select with a timeout or default to prevent blocking if the hub is busy
+	// Use a select with a default to prevent blocking if the hub is busy
 	select {
 	case h.broadcast <- bytes:
+		log.Printf("DEBUG: Message added to hub broadcast channel: Type %s", message.Type) // Optional debug log
 	default:
-		log.Println("Hub broadcast channel is full, message dropped.")
+		log.Println("Hub broadcast channel is full, message dropped.") // Keep this warning
 	}
 }
 
