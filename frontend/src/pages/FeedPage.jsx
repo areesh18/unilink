@@ -1,11 +1,12 @@
-// frontend/src/pages/FeedPage.jsx - Refactored for Light Mode
+// frontend/src/pages/FeedPage.jsx - Refactored for Light Mode & Clear Unread Indicator
 import React, { useState, useEffect, useCallback } from "react";
 import { fetchFeed } from "../api/announcements"; // Import the API function
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth"; // <-- Keep useAuth import
 import { MegaphoneIcon } from '@heroicons/react/24/outline'; // Icon for empty state
 
 // Helper function to format date/time (remains the same)
 const formatDate = (dateString) => {
+  // ... (existing code) ...
   const options = {
     year: "numeric",
     month: "short",
@@ -20,8 +21,9 @@ const formatDate = (dateString) => {
   }
 };
 
-// AnnouncementCard component - Refactored for Light Mode
+// AnnouncementCard component (remains the same)
 const AnnouncementCard = ({ announcement }) => {
+  // ... (existing code) ...
   const {
     title,
     content,
@@ -82,12 +84,12 @@ const AnnouncementCard = ({ announcement }) => {
   );
 };
 
-// FeedPage component - Refactored for Light Mode
+// FeedPage component
 function FeedPage() {
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { addWsMessageListener } = useAuth();
+  const { addWsMessageListener, markAnnouncementsRead } = useAuth(); // <-- Get markAnnouncementsRead
 
   // Load feed data (logic remains the same)
   const loadFeed = useCallback(async () => {
@@ -95,7 +97,6 @@ function FeedPage() {
     setError(null);
     try {
       const data = await fetchFeed();
-      // Sort by createdAt descending to ensure newest are first
       const sortedData = (data || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setAnnouncements(sortedData);
     } catch (err) {
@@ -107,20 +108,25 @@ function FeedPage() {
 
   useEffect(() => {
     loadFeed();
-  }, [loadFeed]);
+    // --- Mark announcements as read when feed is loaded/viewed --- // <-- NEW
+    markAnnouncementsRead();
+  }, [loadFeed, markAnnouncementsRead]); // <-- Add markAnnouncementsRead dependency
 
   // WebSocket listener (logic remains the same)
   useEffect(() => {
+    // ... (existing WebSocket listener code) ...
     if (!addWsMessageListener) return;
 
     const removeListener = addWsMessageListener((message) => {
       if (message.type === "newAnnouncement") {
         console.log("FeedPage received WS announcement:", message.payload);
+        // --- Also mark as read when receiving while page is open --- // <-- NEW
+        markAnnouncementsRead();
         setAnnouncements((prevAnnouncements) => {
+          // Prevent adding duplicates if already present
           if (prevAnnouncements.some((a) => a.id === message.payload.id)) {
             return prevAnnouncements;
           }
-          // Add new announcement and re-sort
           const updatedAnnouncements = [message.payload, ...prevAnnouncements];
           updatedAnnouncements.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           return updatedAnnouncements;
@@ -132,10 +138,12 @@ function FeedPage() {
       console.log("FeedPage removing WS listener");
       removeListener();
     };
-  }, [addWsMessageListener]);
+  // Add markAnnouncementsRead to dependency array
+  }, [addWsMessageListener, markAnnouncementsRead]); // <-- MODIFIED Dependency Array
 
   // Loading Spinner Component
   const LoadingSpinner = () => (
+     // ... (existing code) ...
     <div className="flex justify-center items-center py-16">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
       <p className="ml-3 text-gray-500">Loading feed...</p>
@@ -143,7 +151,7 @@ function FeedPage() {
   );
 
   return (
-    // Main container with spacing
+    // ... (existing JSX structure) ...
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
       <h1 className="text-2xl font-bold text-gray-900">

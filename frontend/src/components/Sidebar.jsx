@@ -1,5 +1,5 @@
-// src/components/Sidebar.jsx - VERIFIED (Minor Styling Adjustments)
-import React from 'react';
+// frontend/src/components/Sidebar.jsx
+import React from 'react'; // <-- Added React import
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -13,7 +13,10 @@ import {
 
 
 function Sidebar() {
-  const { user } = useAuth();
+  const { user, totalUnreadCount, hasUnreadAnnouncements } = useAuth();
+
+  // +++ ADD LOGGING HERE +++
+  console.log("Sidebar Render - hasUnreadAnnouncements:", hasUnreadAnnouncements);
 
   const Icons = {
     Home: HomeOutline,
@@ -37,7 +40,7 @@ function Sidebar() {
     { name: 'My Profile', path: '/profile/me', icon: Icons.Profile },
   ];
 
-  const baseLinkClass = "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group";
+  const baseLinkClass = "relative flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group";
   const inactiveLinkClass = "text-gray-600 hover:bg-gray-100 hover:text-gray-900";
   const activeLinkClass = "bg-indigo-50 text-indigo-600 font-semibold";
 
@@ -46,7 +49,6 @@ function Sidebar() {
 
 
   return (
-    // Uses `hidden md:flex` to hide on mobile
     <aside className="w-64 flex-shrink-0 border-r border-gray-200 bg-white hidden md:flex flex-col">
       {/* Sidebar Header */}
       <div className="p-4 border-b border-gray-200 h-16 flex items-center">
@@ -80,10 +82,30 @@ function Sidebar() {
               }
             >
               <item.icon
-                className={`w-5 h-5 mr-3 flex-shrink-0 ${ NavLink.isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'}`}
+                // Using className directly in NavLink should handle active state color for icon too if styled correctly
+                // Check if activeLinkClass/inactiveLinkClass apply text color that inherits
+                className={`w-5 h-5 mr-3 flex-shrink-0 ${
+                    // Explicitly setting icon color based on active state might be more reliable
+                    // This depends on how NavLink handles isActive propagation. Test both ways.
+                     NavLink.isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
+                   }`}
                 strokeWidth={2}
                />
               <span className="ml-1">{item.name}</span>
+
+              {/* Chat Badge */}
+              {item.name === 'Chat' && totalUnreadCount > 0 && (
+                 <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                 </span>
+              )}
+
+              {/* Feed Indicator */}
+              {item.name === 'Feed' && hasUnreadAnnouncements && (
+                 <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full transform translate-x-1/2 -translate-y-1/2 ring-2 ring-white">
+                    <span className="sr-only">New announcements</span>
+                 </span>
+              )}
             </NavLink>
           ))}
         </div>

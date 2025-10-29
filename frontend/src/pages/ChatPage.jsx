@@ -1,4 +1,4 @@
-// src/pages/ChatPage.jsx - MODIFIED (Height, Mobile Sidebar Logic)
+// src/pages/ChatPage.jsx - MODIFIED (Height, Mobile Sidebar Logic, Unread Count Update)
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -7,7 +7,7 @@ import {
   sendMessage,
   deleteMessage,
 } from "../api/messages";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth"; // <-- Keep useAuth import
 import NewChatModal from "../components/NewChatModal";
 import {
   Bars3Icon, // For mobile toggle in header
@@ -26,6 +26,7 @@ import { TrashIcon } from '@heroicons/react/20/solid';
 // ===========================
 
 const formatTime = (dateString) => {
+  // ... (keep existing formatTime function) ...
   try {
     const date = new Date(dateString);
     const now = new Date();
@@ -57,6 +58,7 @@ const fallbackAvatar = (name) =>
 // ===========================
 
 const ConversationItem = ({ conversation, isActive, onClick }) => (
+    // ... (keep existing ConversationItem component) ...
     <div
       onClick={onClick}
       className={`flex items-center p-3 cursor-pointer transition-colors duration-150 border-b border-gray-100 ${
@@ -95,6 +97,7 @@ const ConversationItem = ({ conversation, isActive, onClick }) => (
   );
 
 const MessageBubble = ({ message, isOwn, onDelete, showAvatar = true }) => (
+    // ... (keep existing MessageBubble component) ...
     <div className={`flex mb-3 ${isOwn ? "justify-end" : "justify-start"} group`}>
       {!isOwn && showAvatar && message.sender && (
         <img
@@ -140,6 +143,7 @@ const MessageBubble = ({ message, isOwn, onDelete, showAvatar = true }) => (
   );
 
 const EmptyState = ({ icon: IconComponent, title, description }) => (
+    // ... (keep existing EmptyState component) ...
     <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
       <IconComponent className="w-16 h-16 text-gray-300 mb-4" strokeWidth={1} />
       <h3 className="text-lg font-semibold mb-1 text-gray-700">
@@ -150,6 +154,7 @@ const EmptyState = ({ icon: IconComponent, title, description }) => (
   );
 
 const LoadingSpinner = () => (
+    // ... (keep existing LoadingSpinner component) ...
     <div className="flex items-center justify-center p-4">
       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
     </div>
@@ -162,7 +167,8 @@ const LoadingSpinner = () => (
 function ChatPage() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  const { user, addWsMessageListener } = useAuth();
+  // Get fetchAndUpdateUnreadCount from useAuth
+  const { user, addWsMessageListener, fetchAndUpdateUnreadCount } = useAuth(); // <-- MODIFIED
 
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -182,6 +188,7 @@ function ChatPage() {
   }, []);
 
   const groupMessages = useCallback((msgs = []) => {
+     // ... (keep existing groupMessages function) ...
     const grouped = [];
     let currentGroup = [];
     let lastSenderId = null;
@@ -199,6 +206,7 @@ function ChatPage() {
     return grouped.flat();
   }, []);
 
+  // Effect to load conversations (remains the same)
   useEffect(() => {
      let isMounted = true;
      const loadConversations = async () => {
@@ -217,6 +225,7 @@ function ChatPage() {
      return () => { isMounted = false; };
   }, [navigate]);
 
+  // Effect to load messages for the selected conversation
   useEffect(() => {
       let isMounted = true;
       if (loading.conversations) return;
@@ -248,7 +257,11 @@ function ChatPage() {
               }
               try {
                   const data = await fetchMessages(conversationId);
-                  if (isMounted) setMessages(data);
+                  if (isMounted) {
+                    setMessages(data);
+                    // --- Update total unread count AFTER messages are fetched --- // <-- NEW
+                    fetchAndUpdateUnreadCount();
+                  }
               } catch (err) {
                  if (isMounted) {
                      setError((prev) => ({ ...prev, messages: err.toString() }));
@@ -268,8 +281,10 @@ function ChatPage() {
           }
       }
       return () => { isMounted = false; };
-  }, [conversationId, conversations, loading.conversations, navigate]);
+  // Add fetchAndUpdateUnreadCount to dependency array
+  }, [conversationId, conversations, loading.conversations, navigate, fetchAndUpdateUnreadCount]); // <-- MODIFIED Dependency Array
 
+  // Effect to scroll to bottom (remains the same)
   useEffect(() => {
     if (!loading.messages) {
       const timer = setTimeout(() => { scrollToBottom(); }, 100);
@@ -277,6 +292,7 @@ function ChatPage() {
     }
   }, [messages, loading.messages, scrollToBottom]);
 
+  // Effect to handle incoming WebSocket messages (remains the same)
   useEffect(() => {
     if (!addWsMessageListener || !user) return;
 
@@ -299,6 +315,9 @@ function ChatPage() {
           });
           return [...filteredMessages, realMessage];
         });
+        // Note: No need to call fetchAndUpdateUnreadCount here,
+        // AuthContext already increments the count on receiving the message.
+        // We only call it when *this* chat's messages are loaded (implying read).
       }
     });
 
@@ -306,6 +325,7 @@ function ChatPage() {
   }, [addWsMessageListener, conversationId, user]);
 
 
+  // Handler for sending messages (remains the same)
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageInput.trim() || !currentConversation || !user) return;
@@ -339,11 +359,14 @@ function ChatPage() {
         messageData.groupId = currentConversation.groupInfo.id;
       }
       await sendMessage(messageData);
+      // Backend will broadcast the message via WS, which updates the message list
+      // including replacing the optimistic message with the real one.
     } catch (err) {
       alert(`Failed to send message: ${err}`);
       console.error("Send message error:", err);
+      // Remove optimistic message on failure
       setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-      setMessageInput(messageToSend);
+      setMessageInput(messageToSend); // Restore input content
     } finally {
       setSending(false);
        // Focus input after sending or error
@@ -351,6 +374,7 @@ function ChatPage() {
     }
   };
 
+  // Handler for deleting messages (remains the same)
   const handleDeleteMessage = async (messageId) => {
     if (!messageId || typeof messageId === 'string') return;
     if (!window.confirm("Delete this message?")) return;
@@ -363,10 +387,11 @@ function ChatPage() {
     }
   };
 
+  // Handler for selecting a conversation (remains the same)
   const handleSelectConversation = (conv) => {
     if (conv.conversationId !== conversationId) {
-      setMessages([]);
-      setLoading(prev => ({ ...prev, messages: true }));
+      setMessages([]); // Clear messages immediately for perceived speed
+      setLoading(prev => ({ ...prev, messages: true })); // Set loading state
       navigate(`/chat/${conv.conversationId}`);
     }
     // No need to setIsMobileMenuOpen(false) here, it's handled in useEffect
