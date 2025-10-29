@@ -462,7 +462,8 @@ func MarkListingSold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var listing models.MarketplaceListing
-	result := db.DB.Where("id = ? AND college_id = ?", listingID, claims.CollegeID).First(&listing)
+	// Preload Buyer - might be needed even if just checking status
+	result := db.DB.Preload("Buyer").Where("id = ? AND college_id = ?", listingID, claims.CollegeID).First(&listing)
 
 	if result.Error != nil {
 		respondWithError(w, http.StatusNotFound, "Listing not found or access denied")
@@ -475,16 +476,23 @@ func MarkListingSold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Can only mark as sold if it's currently reserved (or maybe available)
-	if listing.Status != "reserved" && listing.Status != "available" {
-		respondWithError(w, http.StatusBadRequest, "Listing must be available or reserved to be marked as sold")
+	// *** CORRECTED CHECK: Can only mark as sold if it's currently RESERVED ***
+	if listing.Status != "reserved" {
+		respondWithError(w, http.StatusBadRequest, "Listing must be reserved by a buyer before it can be marked as sold")
+		return
+	}
+	// *** END CORRECTION ***
+
+	// Check if there actually is a buyer associated (should be true if reserved)
+	if listing.BuyerID == nil {
+		log.Printf("Error: Listing %d is reserved but has no BuyerID. Seller: %d", listing.ID, listing.SellerID)
+		respondWithError(w, http.StatusInternalServerError, "Inconsistent reservation data. Cannot mark as sold.")
 		return
 	}
 
 	// Update status to sold
 	listing.Status = "sold"
 	listing.ReservedUntil = nil // Clear reservation time if set
-	// Note: BuyerID remains if it was reserved, or is nil if marked sold from 'available'
 
 	if err := db.DB.Save(&listing).Error; err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to mark listing as sold")
