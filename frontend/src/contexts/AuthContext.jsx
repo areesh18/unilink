@@ -5,7 +5,7 @@ import React, { createContext, useState, useEffect, useRef, useCallback } from '
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { loginAdminApi } from '../api/admin';
-import { fetchConversations } from '../api/messages'; // Keep import
+import { fetchConversations } from '../api/messages';
 
 // Create the context AND EXPORT IT
 export const AuthContext = createContext(null);
@@ -78,7 +78,6 @@ export const AuthProvider = ({ children }) => {
 
   // --- Function to mark announcements as read ---
   const markAnnouncementsRead = useCallback(() => {
-    // +++ ADD LOGGING HERE +++
     console.log("AuthContext: markAnnouncementsRead called, setting hasUnreadAnnouncements to false");
     setHasUnreadAnnouncements(false);
   }, []);
@@ -93,13 +92,14 @@ export const AuthProvider = ({ children }) => {
     }
     console.log('Attempting WebSocket connection...');
 
+    // Cleanup previous connection resources
     if (wsRef.current) {
         wsRef.current.onopen = null;
         wsRef.current.onmessage = null;
         wsRef.current.onerror = null;
         wsRef.current.onclose = null;
-        if (wsRef.current.readyState !== WebSocket.CLOSED) {
-            wsRef.current.close();
+        if (wsRef.current.readyState !== WebSocket.CLOSED && wsRef.current.readyState !== WebSocket.CLOSING) {
+             wsRef.current.close();
         }
     }
 
@@ -127,29 +127,49 @@ export const AuthProvider = ({ children }) => {
             const isValidSenderId = typeof senderId === 'number';
             const isValidCurrentUserId = typeof currentUserId === 'number';
 
-            // --- Handle Notifications ---
-            if (message.type === 'newMessage' && isValidSenderId && isValidCurrentUserId && senderId !== currentUserId) {
+            let shouldIncrementCount = false; // <-- Flag to determine increment after checks
+
+            // --- Handle Notifications & Unread Counts ---
+            if (message.type === 'newMessage') {
                 const messageId = message.payload?.id;
-                // Use functional update to get latest notifications state for check
-                setNotifications((prevNots) => {
-                    const notificationExists = prevNots.some(n => n.messageId === messageId);
-                    if (!notificationExists) {
-                        console.log(`Adding 'newMessage' notification for msg ID ${messageId}`);
-                        const newNotification = {
-                            id: Date.now() + Math.random(), messageId: messageId, type: 'message',
-                            message: `New message from ${message.payload.sender.name || 'someone'}`,
-                        };
-                        setTotalUnreadCount(prevCount => prevCount + 1); // Increment count here
-                        return [newNotification, ...prevNots].slice(0, 5);
-                    } else {
-                        console.log(`Duplicate 'newMessage' notification skipped for msg ID ${messageId}`);
-                        return prevNots; // Return previous state if duplicate
-                    }
-                });
+                // Check if it's a message from ANOTHER user
+                if (isValidSenderId && isValidCurrentUserId && senderId !== currentUserId) {
+                    shouldIncrementCount = true; // Mark to potentially increment count
+                    // Handle notification addition using functional update
+                    setNotifications((prevNots) => {
+                        const notificationExists = prevNots.some(n => n.messageId === messageId);
+                        if (!notificationExists) {
+                            console.log(`Adding 'newMessage' notification for msg ID ${messageId}`);
+                            const newNotification = {
+                                id: Date.now() + Math.random(), messageId: messageId, type: 'message',
+                                message: `New message from ${message.payload.sender.name || 'someone'}`,
+                            };
+                            return [newNotification, ...prevNots].slice(0, 5);
+                        } else {
+                            console.log(`Duplicate 'newMessage' notification skipped for msg ID ${messageId}`);
+                            shouldIncrementCount = false; // Don't increment count if notification is a duplicate
+                            return prevNots;
+                        }
+                    });
+                } else if (senderId === currentUserId) {
+                     console.log("WS Message is from self, skipping notification and count increment.");
+                     shouldIncrementCount = false; // Explicitly ensure no increment
+                } else {
+                    console.warn("WS Message 'newMessage' received, but sender or current user ID is invalid/missing. Skipping count/notification.");
+                    shouldIncrementCount = false; // Ensure no increment on invalid data
+                }
+
+                // --- Perform count increment AFTER notification logic --- // <-- MOVED INCREMENT
+                if (shouldIncrementCount) {
+                     setTotalUnreadCount(prevCount => {
+                         console.log(`Incrementing unread count from ${prevCount} for received message`);
+                         return prevCount + 1;
+                     });
+                 }
 
             } else if (message.type === 'newAnnouncement') {
+                 // Announcement logic (remains the same)
                  const announcementId = message.payload?.id;
-                 // Use functional update
                  setNotifications((prevNots) => {
                     const notificationExists = prevNots.some(n => n.announcementId === announcementId);
                      if (!notificationExists) {
@@ -158,23 +178,19 @@ export const AuthProvider = ({ children }) => {
                             id: Date.now() + Math.random(), announcementId: announcementId, type: 'announcement',
                             message: `New Announcement: ${message.payload.title || 'Check the feed!'}`,
                         };
-                        // --- Set unread announcement flag ---
                         setHasUnreadAnnouncements(true);
-                        // +++ ADD LOGGING HERE +++
                         console.log("AuthContext: setHasUnreadAnnouncements called with true");
                         return [newNotification, ...prevNots].slice(0, 5);
                      } else {
                         console.log(`Duplicate 'newAnnouncement' notification skipped for ann ID ${announcementId}`);
-                        return prevNots; // Return previous state if duplicate
+                        return prevNots;
                      }
                  });
-            } else if (message.type === 'newMessage' && senderId === currentUserId) {
-                console.log("WS Message is from self, skipping notification.");
             }
-            // --- End Handle Notifications ---
+            // --- End Handle Notifications & Unread Counts ---
 
             // --- Notify component listeners ---
-            messageListenersRef.current.forEach(listener => listener(message));
+            messageListenersRef.current.forEach(listener => listener(message)); // Pass only message
             // --- End Notify listeners ---
         } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
@@ -204,11 +220,11 @@ export const AuthProvider = ({ children }) => {
           }, 5000);
       }
     };
-  // Removed notifications from dependency array to prevent potential loops if setNotifications triggers reconnect
-  // removeNotification is stable due to useCallback
-  }, [removeNotification]); // <-- Corrected Dependency Array
+  // Removed notifications dependency
+  }, [removeNotification]);
 
   const disconnectWebSocket = useCallback(() => {
+    // ... (keep as is) ...
       if (reconnectTimeoutRef.current) {
          clearTimeout(reconnectTimeoutRef.current);
          reconnectTimeoutRef.current = null;
@@ -231,6 +247,7 @@ export const AuthProvider = ({ children }) => {
 
   // --- Function to fetch and update total unread count ---
   const fetchAndUpdateUnreadCount = useCallback(async () => {
+    // ... (keep as is) ...
     if (!localStorage.getItem('authToken')) {
         setTotalUnreadCount(0);
         return;
@@ -248,8 +265,9 @@ export const AuthProvider = ({ children }) => {
   // --- End Unread Count Function ---
 
 
-  // Load initial state from localStorage
+  // Load initial state from localStorage (keep as is)
   useEffect(() => {
+    // ... (keep as is) ...
     let initialToken = null;
     let initialUser = null;
     try {
@@ -280,8 +298,9 @@ export const AuthProvider = ({ children }) => {
   }, [connectWebSocket, disconnectWebSocket, fetchAndUpdateUnreadCount]);
 
 
-  // Login function
+  // Login function (keep as is)
   const login = async (credentials, loginType = 'student') => {
+    // ... (keep as is) ...
     let data;
     if (loginType === 'admin') {
       if (!credentials.email || !credentials.password) {
@@ -313,8 +332,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout function
+  // Logout function (keep as is)
   const logout = () => {
+    // ... (keep as is) ...
     disconnectWebSocket();
 
     setUser(null);
@@ -328,8 +348,9 @@ export const AuthProvider = ({ children }) => {
     navigate('/login');
   };
 
-  // updateUserContext
+  // updateUserContext (keep as is)
   const updateUserContext = (newUserData) => {
+    // ... (keep as is) ...
      if (newUserData) {
         setUser(newUserData);
         currentUserIdRef.current = newUserData?.id;
@@ -340,7 +361,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Context value
+  // Context value (keep as is)
   const value = {
     user,
     token,
