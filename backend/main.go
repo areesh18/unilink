@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context" // <-- Make sure context is imported
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"time" // <-- Import time if not already present
 
 	"unilink-backend/db"
 	"unilink-backend/handlers"
-	"unilink-backend/utils" // <-- Make sure utils is imported
+	"unilink-backend/utils"
 	"unilink-backend/websocket"
 
 	"github.com/gorilla/mux"
@@ -18,60 +19,54 @@ import (
 // Global WebSocket Hub instance
 var wsHub *websocket.Hub
 
-// --- REMOVE local key definitions ---
-
 // Middleware to inject Hub into context
 func withHub(hub *websocket.Hub) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("DEBUG: withHub middleware running for path: %s", r.URL.Path)
-			if hub == nil {
-				log.Printf("!!! DEBUG: Hub instance is nil in withHub middleware for path: %s", r.URL.Path)
-			}
-
-			// --- USE utils.HubKey here ---
-			ctx := context.WithValue(r.Context(), utils.HubKey, hub) // Use key from utils package
-			// --- END USE ---
-
-			// Verification log using utils.HubKey
-			retrievedHub, retrievedOk := ctx.Value(utils.HubKey).(*websocket.Hub) // Use key from utils package
-			if !retrievedOk || retrievedHub == nil {
-				log.Printf("!!! DEBUG: Failed to retrieve Hub immediately after setting in withHub for path: %s. Ok: %v, HubNil: %v", r.URL.Path, retrievedOk, retrievedHub == nil)
-			} else {
-				log.Printf("DEBUG: Successfully set and retrieved Hub in withHub for path: %s", r.URL.Path)
-			}
-
+			// log.Printf("DEBUG: withHub middleware running for path: %s", r.URL.Path) // Keep logging minimal unless debugging
+			// if hub == nil {
+			// 	log.Printf("!!! DEBUG: Hub instance is nil in withHub middleware for path: %s", r.URL.Path)
+			// }
+			ctx := context.WithValue(r.Context(), utils.HubKey, hub)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
+// *** NEW: Middleware to log requests ***
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		log.Printf("--> %s %s", r.Method, r.URL.Path)
+		// Call the next handler
+		next.ServeHTTP(w, r)
+		// Log after handler finishes
+		log.Printf("<-- %s %s (%v)", r.Method, r.URL.Path, time.Since(start))
+	})
+}
+
 func main() {
-	// Load environment variables from .env file
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Warning: .env file not found, using system environment variables")
 	}
 
-	// Connect to database
 	db.ConnectDB()
-
-	// Initialize and run the WebSocket Hub
 	wsHub = websocket.NewHub()
 	go wsHub.Run()
 
-	// Create router
 	router := mux.NewRouter()
-
-	// Apply CORS middleware
 	corsMiddleware := utils.SetupCORS()
+
+	// Apply logging middleware globally (optional, but helpful for debugging)
+	router.Use(loggingMiddleware)
 
 	// Public routes
 	router.HandleFunc("/api/check-college", handlers.CheckCollege).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/register", handlers.RegisterStudent).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/login", handlers.Login).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/admin/login", handlers.LoginAdmin).Methods("POST", "OPTIONS")
-	router.HandleFunc("/api/setup/platform-admin", handlers.CreateFirstPlatformAdmin).Methods("POST", "OPTIONS") // REMOVE LATER
+	// router.HandleFunc("/api/setup/platform-admin", handlers.CreateFirstPlatformAdmin).Methods("POST", "OPTIONS") // Keep commented unless needed
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(wsHub, w, r)
 	})
@@ -83,18 +78,24 @@ func main() {
 
 	// Protected routes
 	protected := router.PathPrefix("/api").Subrouter()
-	// --- APPLY MIDDLEWARE ---
-	protected.Use(withHub(wsHub))          // Apply Hub middleware FIRST
+	protected.Use(withHub(wsHub))      // Apply Hub middleware FIRST
 	protected.Use(utils.ValidateToken) // Then validate token
-	// --- END APPLY ---
 
 	// Define all protected routes
 	// Student marketplace routes
 	protected.HandleFunc("/listings", handlers.GetAllListings).Methods("GET")
 	protected.HandleFunc("/listings", handlers.CreateListing).Methods("POST")
 	protected.HandleFunc("/listings/my", handlers.GetMyListings).Methods("GET")
+	protected.HandleFunc("/listings/my-reservations", handlers.GetMyReservations).Methods("GET")
 	protected.HandleFunc("/listings/{id}", handlers.GetListingByID).Methods("GET")
 	protected.HandleFunc("/listings/{id}", handlers.DeleteListing).Methods("DELETE")
+	// *** NEW Marketplace Action Routes ***
+	protected.HandleFunc("/listings/{id}/reserve", handlers.ReserveListing).Methods("POST")
+	protected.HandleFunc("/listings/{id}/cancel-reservation", handlers.CancelReservation).Methods("POST")
+	protected.HandleFunc("/listings/{id}/mark-sold", handlers.MarkListingSold).Methods("POST")
+
+	// *** END NEW Routes ***
+
 	// Profile routes
 	protected.HandleFunc("/profile/me", handlers.GetMyProfile).Methods("GET")
 	protected.HandleFunc("/profile/me", handlers.UpdateMyProfile).Methods("PUT")
@@ -125,7 +126,7 @@ func main() {
 
 	// College Admin Routes
 	collegeAdmin := protected.PathPrefix("/college-admin").Subrouter()
-	collegeAdmin.Use(utils.RequireRole("college_admin")) // Hub middleware already applied via 'protected'
+	collegeAdmin.Use(utils.RequireRole("college_admin"))
 	collegeAdmin.HandleFunc("/students", handlers.GetCollegeStudents).Methods("GET")
 	collegeAdmin.HandleFunc("/listings", handlers.GetCollegeListings).Methods("GET")
 	collegeAdmin.HandleFunc("/listings/{id}", handlers.DeleteCollegeListing).Methods("DELETE")
@@ -140,23 +141,20 @@ func main() {
 
 	// Platform Admin Routes
 	platformAdmin := protected.PathPrefix("/platform-admin").Subrouter()
-	platformAdmin.Use(utils.RequireRole("platform_admin")) // Hub middleware already applied via 'protected'
+	platformAdmin.Use(utils.RequireRole("platform_admin"))
 	platformAdmin.HandleFunc("/colleges", handlers.AddCollege).Methods("POST")
 	platformAdmin.HandleFunc("/college-admins", handlers.CreateCollegeAdmin).Methods("POST")
 	platformAdmin.HandleFunc("/students", handlers.GetAllStudents).Methods("GET")
 	platformAdmin.HandleFunc("/listings", handlers.GetAllListingsPlatform).Methods("GET")
 	platformAdmin.HandleFunc("/stats", handlers.GetPlatformStats).Methods("GET")
 
-	// Get port
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Wrap router with CORS
 	handler := corsMiddleware(router)
 
-	// Start server
 	log.Printf("🚀 Server starting on port %s", port)
 	log.Printf("🔌 WebSocket endpoint: ws://localhost:%s/ws", port)
 	log.Printf("📍 Health check: http://localhost:%s/api/health", port)

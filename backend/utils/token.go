@@ -18,6 +18,7 @@ type CustomClaims struct {
 	CollegeID      uint   `json:"collegeID"`
 	CollegeCode    string `json:"collegeCode"`
 	CollegeLogoURL string `json:"collegeLogoUrl"`
+	Name           string `json:"name"` // *** Already Added in previous step's model update ***
 	jwt.RegisteredClaims
 }
 
@@ -34,12 +35,14 @@ func GenerateJWT(user *models.User) (string, error) {
 		Email:          user.Email,
 		Role:           user.Role,
 		CollegeID:      user.CollegeID,
-		CollegeCode:    user.College.CollegeCode,
-		CollegeLogoURL: user.College.LogoURL,
+		CollegeCode:    user.College.CollegeCode, // Assumes user.College is preloaded
+		CollegeLogoURL: user.College.LogoURL,   // Assumes user.College is preloaded
+		Name:           user.Name,             // *** ADDED user.Name here ***
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)), // Token valid for 24 hours
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "unilink-backend",
+			Subject:   fmt.Sprintf("%d", user.ID), // Good practice to add Subject
 		},
 	}
 
@@ -71,9 +74,16 @@ func ValidateJWT(tokenString string) (*CustomClaims, error) {
 		return []byte(jwtSecret), nil
 	})
 
+	// Improved error handling for specific JWT errors
 	if err != nil {
-		return nil, err
+		// You can check for specific errors like jwt.ErrTokenExpired, jwt.ErrTokenNotValidYet etc.
+		// For example:
+		// if errors.Is(err, jwt.ErrTokenExpired) {
+		//  return nil, fmt.Errorf("token has expired")
+		// }
+		return nil, fmt.Errorf("invalid token: %w", err) // Wrap original error
 	}
+
 	// Extract and return claims
 	if claims, ok := token.Claims.(*CustomClaims); ok && token.Valid {
 		return claims, nil

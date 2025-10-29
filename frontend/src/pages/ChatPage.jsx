@@ -1,24 +1,25 @@
-// src/pages/ChatPage.jsx - MODIFIED (Height, Mobile Sidebar Logic, Unread Count Update)
+// src/pages/ChatPage.jsx - MODIFIED (Height, Mobile Sidebar, Context Header)
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom"; // *** Import useLocation, Link ***
 import {
   fetchConversations,
   fetchMessages,
   sendMessage,
   deleteMessage,
 } from "../api/messages";
-import { useAuth } from "../hooks/useAuth"; // <-- Keep useAuth import
+import { useAuth } from "../hooks/useAuth";
 import NewChatModal from "../components/NewChatModal";
 import {
-  Bars3Icon, // For mobile toggle in header
+  Bars3Icon,
   XMarkIcon,
   PaperAirplaneIcon,
   PlusIcon,
   ChatBubbleBottomCenterTextIcon,
   QuestionMarkCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  PhotoIcon, // *** Import PhotoIcon ***
 } from '@heroicons/react/24/outline';
-import { TrashIcon } from '@heroicons/react/20/solid';
+import { TrashIcon, TagIcon } from '@heroicons/react/20/solid'; // *** Import TagIcon ***
 
 
 // ===========================
@@ -32,20 +33,14 @@ const formatTime = (dateString) => {
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
-
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
-
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
-
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays}d ago`;
-
     return date.toLocaleDateString();
-  } catch {
-    return dateString;
-  }
+  } catch { return dateString; }
 };
 
 const fallbackAvatar = (name) =>
@@ -53,12 +48,19 @@ const fallbackAvatar = (name) =>
     name || 'User'
   )}&background=6366f1&color=fff&bold=true`;
 
+// *** NEW: Format Currency Helper ***
+const formatCurrency = (amount) => {
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount)) return '$--.--';
+    return `$${numericAmount.toFixed(2)}`;
+};
+
 // ===========================
 // SUB-COMPONENTS
 // ===========================
 
+// ... (ConversationItem, MessageBubble, EmptyState, LoadingSpinner remain the same) ...
 const ConversationItem = ({ conversation, isActive, onClick }) => (
-    // ... (keep existing ConversationItem component) ...
     <div
       onClick={onClick}
       className={`flex items-center p-3 cursor-pointer transition-colors duration-150 border-b border-gray-100 ${
@@ -97,7 +99,6 @@ const ConversationItem = ({ conversation, isActive, onClick }) => (
   );
 
 const MessageBubble = ({ message, isOwn, onDelete, showAvatar = true }) => (
-    // ... (keep existing MessageBubble component) ...
     <div className={`flex mb-3 ${isOwn ? "justify-end" : "justify-start"} group`}>
       {!isOwn && showAvatar && message.sender && (
         <img
@@ -143,7 +144,6 @@ const MessageBubble = ({ message, isOwn, onDelete, showAvatar = true }) => (
   );
 
 const EmptyState = ({ icon: IconComponent, title, description }) => (
-    // ... (keep existing EmptyState component) ...
     <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
       <IconComponent className="w-16 h-16 text-gray-300 mb-4" strokeWidth={1} />
       <h3 className="text-lg font-semibold mb-1 text-gray-700">
@@ -154,11 +154,73 @@ const EmptyState = ({ icon: IconComponent, title, description }) => (
   );
 
 const LoadingSpinner = () => (
-    // ... (keep existing LoadingSpinner component) ...
     <div className="flex items-center justify-center p-4">
       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
     </div>
   );
+
+// *** NEW: Listing Context Header Component ***
+const ListingContextCard = ({ listing, onClear }) => {
+  if (!listing) return null;
+
+  const handleImageError = (e) => {
+    e.target.onerror = null;
+    e.target.style.display = 'none'; // Hide broken img
+    e.target.nextElementSibling.style.display = 'flex'; // Show placeholder
+  };
+
+  return (
+    <div className="p-3 border-b border-gray-200 bg-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+                {/* Image */}
+                <div className="h-12 w-12 bg-gray-200 rounded-md overflow-hidden relative flex-shrink-0">
+                    {listing.imageUrl ? (
+                        <>
+                            <img 
+                                src={listing.imageUrl} 
+                                alt={listing.title} 
+                                className="h-full w-full object-cover"
+                                onError={handleImageError}
+                            />
+                            <div className="absolute inset-0 hidden items-center justify-center flex-col text-gray-400 bg-gray-200">
+                                <PhotoIcon className="w-5 h-5"/>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="h-full w-full flex items-center justify-center flex-col text-gray-400">
+                            <PhotoIcon className="w-5 h-5"/>
+                        </div>
+                    )}
+                </div>
+                {/* Info */}
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-500 truncate">Regarding item:</p>
+                    <Link 
+                        to={`/market/${listing.id}`} 
+                        className="text-sm font-semibold text-gray-800 hover:text-indigo-600 truncate block"
+                        title={listing.title}
+                    >
+                        {listing.title}
+                    </Link>
+                    <p className="text-xs font-medium text-indigo-600 flex items-center gap-1">
+                        <TagIcon className="w-3 h-3" />
+                        {formatCurrency(listing.price)}
+                    </p>
+                </div>
+            </div>
+             {/* Clear Button */}
+            <button
+                onClick={onClear}
+                className="p-1.5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                title="Dismiss item context"
+            >
+                <XMarkIcon className="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+  );
+};
 
 // ===========================
 // MAIN COMPONENT
@@ -167,8 +229,12 @@ const LoadingSpinner = () => (
 function ChatPage() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  // Get fetchAndUpdateUnreadCount from useAuth
-  const { user, addWsMessageListener, fetchAndUpdateUnreadCount } = useAuth(); // <-- MODIFIED
+  const { user, addWsMessageListener, fetchAndUpdateUnreadCount } = useAuth();
+  
+  // *** NEW: Get location state ***
+  const location = useLocation();
+  // Use state to make the context dismissible
+  const [listingContext, setListingContext] = useState(location.state?.listingContext || null);
 
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -225,14 +291,25 @@ function ChatPage() {
      return () => { isMounted = false; };
   }, [navigate]);
 
-  // Effect to load messages for the selected conversation
+  // Effect to load messages
   useEffect(() => {
       let isMounted = true;
       if (loading.conversations) return;
 
+      // *** NEW: Update listing context when conversationId changes ***
+      // If navigating away, clear context. If navigating to, set it from location.
+      const newListingContext = location.state?.listingContext || null;
+      // Only set context if it's relevant to the *current* conversationId
+      // (This check is complex, for hackathon, just show if it exists)
+      if(isMounted) {
+          setListingContext(newListingContext);
+      }
+      // *** END NEW ***
+
       if (!conversationId) {
+         // ... (existing logic for no conversationId) ...
          if (conversations.length > 0) {
-            navigate(`/chat/${conversations[0].conversationId}`, { replace: true });
+            // navigate(`/chat/${conversations[0].conversationId}`, { replace: true }); // Avoid auto-navigating
          } else {
              if (isMounted) {
                 setCurrentConversation(null);
@@ -246,11 +323,12 @@ function ChatPage() {
       const currentConvData = conversations.find(c => c.conversationId === conversationId);
       if (isMounted) {
          setCurrentConversation(currentConvData || null);
-         setIsMobileMenuOpen(false); // Close mobile sidebar when conversation changes
+         setIsMobileMenuOpen(false);
       }
 
       if (currentConvData) {
           const loadMessages = async () => {
+              // ... (existing message loading logic) ...
               if (isMounted) {
                  setLoading((prev) => ({ ...prev, messages: true }));
                  setError((prev) => ({ ...prev, messages: null }));
@@ -259,7 +337,6 @@ function ChatPage() {
                   const data = await fetchMessages(conversationId);
                   if (isMounted) {
                     setMessages(data);
-                    // --- Update total unread count AFTER messages are fetched --- // <-- NEW
                     fetchAndUpdateUnreadCount();
                   }
               } catch (err) {
@@ -273,16 +350,20 @@ function ChatPage() {
           };
           loadMessages();
       } else {
+           // ... (existing logic for conversation not found) ...
           if (isMounted) {
              setMessages([]);
              setCurrentConversation(null);
-             setError(prev => ({ ...prev, messages: "Conversation not found."}));
+             // Only set error if not still loading conversations
+             if (!loading.conversations) {
+                setError(prev => ({ ...prev, messages: "Conversation not found."}));
+             }
              setLoading(prev => ({...prev, messages: false}));
           }
       }
       return () => { isMounted = false; };
-  // Add fetchAndUpdateUnreadCount to dependency array
-  }, [conversationId, conversations, loading.conversations, navigate, fetchAndUpdateUnreadCount]); // <-- MODIFIED Dependency Array
+  // *** Added location.state to dependency array ***
+  }, [conversationId, conversations, loading.conversations, navigate, fetchAndUpdateUnreadCount, location.state]);
 
   // Effect to scroll to bottom (remains the same)
   useEffect(() => {
@@ -295,16 +376,14 @@ function ChatPage() {
   // Effect to handle incoming WebSocket messages (remains the same)
   useEffect(() => {
     if (!addWsMessageListener || !user) return;
-
     const removeListener = addWsMessageListener((message) => {
+      // ... (existing WS message handling logic) ...
       if (!message || message.type !== 'newMessage' || !message.payload || typeof message.payload.id === 'undefined' || !message.payload.sender) return;
-
       if (message.payload.conversationId === conversationId) {
         const realMessage = message.payload;
         setMessages((prevMessages) => {
           const realMessageExists = prevMessages.some(m => m.id === realMessage.id && typeof m.id !== 'string');
           if (realMessageExists) return prevMessages;
-
           const filteredMessages = prevMessages.filter(msg => {
             const isOptimisticMatch = (
               msg.id && typeof msg.id === 'string' && msg.id.startsWith('temp-') &&
@@ -315,12 +394,8 @@ function ChatPage() {
           });
           return [...filteredMessages, realMessage];
         });
-        // Note: No need to call fetchAndUpdateUnreadCount here,
-        // AuthContext already increments the count on receiving the message.
-        // We only call it when *this* chat's messages are loaded (implying read).
       }
     });
-
     return () => removeListener();
   }, [addWsMessageListener, conversationId, user]);
 
@@ -329,7 +404,6 @@ function ChatPage() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageInput.trim() || !currentConversation || !user) return;
-
     setSending(true);
     const tempId = `temp-${Date.now()}-${Math.random()}`;
     const optimisticMessage = {
@@ -342,11 +416,9 @@ function ChatPage() {
       isRead: false,
       createdAt: new Date().toISOString(),
     };
-
     setMessages((prev) => [...prev, optimisticMessage]);
     const messageToSend = messageInput.trim();
     setMessageInput("");
-
     try {
       const messageData = {
         content: messageToSend,
@@ -359,17 +431,13 @@ function ChatPage() {
         messageData.groupId = currentConversation.groupInfo.id;
       }
       await sendMessage(messageData);
-      // Backend will broadcast the message via WS, which updates the message list
-      // including replacing the optimistic message with the real one.
     } catch (err) {
       alert(`Failed to send message: ${err}`);
       console.error("Send message error:", err);
-      // Remove optimistic message on failure
       setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-      setMessageInput(messageToSend); // Restore input content
+      setMessageInput(messageToSend);
     } finally {
       setSending(false);
-       // Focus input after sending or error
       messageInputRef.current?.focus();
     }
   };
@@ -390,15 +458,28 @@ function ChatPage() {
   // Handler for selecting a conversation (remains the same)
   const handleSelectConversation = (conv) => {
     if (conv.conversationId !== conversationId) {
-      setMessages([]); // Clear messages immediately for perceived speed
-      setLoading(prev => ({ ...prev, messages: true })); // Set loading state
-      navigate(`/chat/${conv.conversationId}`);
+      setMessages([]);
+      setLoading(prev => ({ ...prev, messages: true }));
+      // *** NEW: Clear state when navigating away ***
+      navigate(`/chat/${conv.conversationId}`, { replace: true, state: {} });
+      setListingContext(null);
     }
-    // No need to setIsMobileMenuOpen(false) here, it's handled in useEffect
   };
+
+  // *** NEW: Handler to clear context card ***
+  const clearListingContext = () => {
+      setListingContext(null);
+      // Navigate to same page but replace state to remove it
+      navigate(location.pathname, { replace: true, state: {} });
+  };
+
 
   // Render Logic
   const groupedDisplayMessages = groupMessages(messages);
+  // *** Check if the context listing matches the *current* chat ***
+  // (This is a simplified check for the hackathon)
+  const showListingContext = listingContext && listingContext.id && currentConversation;
+
 
   return (
     <>
@@ -407,21 +488,20 @@ function ChatPage() {
         onClose={() => setIsNewChatModalOpen(false)}
       />
 
-      {/* Main Container - Updated Height Calculation */}
-      {/* 4rem top nav + 4rem bottom nav = 8rem total on mobile */}
-      <div className="flex h-[calc(100vh-4rem-4rem)] md:h-[calc(100vh-4rem)] bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+      {/* Main Container - h-[calc(100vh-4rem-4rem)] md:h-[calc(100vh-4rem)] */}
+      <div className="flex h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)] bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
 
-        {/* Conversations Sidebar - Adjusted Mobile Overlay */}
+        {/* Conversations Sidebar (remains the same) */}
         <div
           className={`
             ${isMobileMenuOpen ? 'fixed md:static inset-0 z-40 bg-white' : 'hidden'}
              md:flex w-full md:w-80 border-r border-gray-200 flex-col
           `}
         >
-          {/* Sidebar Header */}
+          {/* ... (Sidebar Header, New Chat Button, Conversations List) ... */}
+           {/* Sidebar Header */}
           <div className="p-4 border-b border-gray-200 flex-shrink-0 h-16 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Messages</h2>
-              {/* Close button for mobile overlay */}
               <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="md:hidden p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
@@ -430,7 +510,7 @@ function ChatPage() {
                   <XMarkIcon className="w-5 h-5" />
               </button>
           </div>
-          {/* New Chat Button (Below Header) */}
+          {/* New Chat Button */}
           <div className="p-4 border-b border-gray-100 flex-shrink-0">
              <button
                 onClick={() => setIsNewChatModalOpen(true)}
@@ -439,7 +519,6 @@ function ChatPage() {
                 <PlusIcon className="w-4 h-4" strokeWidth={3}/> New Chat
              </button>
           </div>
-
           {/* Conversations List */}
           <div className="flex-1 overflow-y-auto">
              {loading.conversations && <LoadingSpinner />}
@@ -458,15 +537,17 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* Messages Area - Added overlay for mobile */}
+        {/* Messages Area */}
         <div
             className={`flex-1 flex flex-col bg-gray-50 transition-opacity duration-200 ${
-              isMobileMenuOpen ? 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto' : 'opacity-100' // Hide visually on mobile when sidebar open
+              isMobileMenuOpen ? 'opacity-0 pointer-events-none md:opacity-100 md:pointer-events-auto' : 'opacity-100'
             }`}
           >
            {/* Conditional Rendering */}
-           {!conversationId && !loading.conversations ? (
+           {!conversationId && !loading.conversations && conversations.length > 0 ? (
              <EmptyState icon={ChatBubbleBottomCenterTextIcon} title="Select a Conversation" description="Choose a chat from the left panel to view messages." />
+            ) : !conversationId && !loading.conversations && conversations.length === 0 ? (
+             <EmptyState icon={ChatBubbleBottomCenterTextIcon} title="No Conversations" description="Start a new chat or talk to friends to get started." />
             ) : loading.conversations && !currentConversation ? (
               <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>
             ) : !currentConversation && !loading.conversations && conversationId ? (
@@ -490,9 +571,18 @@ function ChatPage() {
                     </div>
                   </div>
                 )}
+                
+                {/* *** NEW: Listing Context Header *** */}
+                {showListingContext && (
+                    <ListingContextCard 
+                        listing={listingContext} 
+                        onClear={clearListingContext} 
+                    />
+                )}
 
                 {/* Messages Display Area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                   {/* ... (existing message rendering logic) ... */}
                    {loading.messages && messages.length === 0 ? (
                      <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>
                    ) : error.messages ? (
@@ -515,7 +605,7 @@ function ChatPage() {
                    )}
                 </div>
 
-                {/* Message Input Form */}
+                {/* Message Input Form (remains the same) */}
                 {currentConversation && (
                   <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-200 bg-white flex-shrink-0">
                      <div className="flex items-center space-x-2">

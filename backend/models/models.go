@@ -50,13 +50,19 @@ type MarketplaceListing struct {
 	Description string  `json:"description"`
 	Price       float64 `gorm:"not null" json:"price"`
 	ImageURL    string  `json:"imageUrl"`
-	Status      string  `gorm:"default:'available'" json:"status"` // "available", "sold"
+	// *** UPDATED Status field ***
+	Status string `gorm:"default:'available';index" json:"status"` // "available", "reserved", "sold", "cancelled"
 
 	// Foreign Keys
 	SellerID  uint    `gorm:"not null" json:"sellerId"`
 	Seller    User    `gorm:"foreignKey:SellerID" json:"seller"`
-	CollegeID uint    `gorm:"not null" json:"collegeId"` // CRITICAL: College isolation
+	CollegeID uint    `gorm:"not null;index" json:"collegeId"` // CRITICAL: College isolation
 	College   College `gorm:"foreignKey:CollegeID" json:"college"`
+
+	// *** NEW Fields for Reservation ***
+	BuyerID       *uint      `gorm:"index" json:"buyerId"`     // Pointer to allow NULL
+	Buyer         *User      `gorm:"foreignKey:BuyerID" json:"buyer,omitempty"` // Added relation, omitempty for JSON
+	ReservedUntil *time.Time `json:"reservedUntil"` // Pointer to allow NULL
 
 	CreatedAt time.Time      `json:"createdAt"`
 	UpdatedAt time.Time      `json:"updatedAt"`
@@ -94,6 +100,8 @@ type JWTClaims struct {
 	CollegeID      uint   `json:"collegeID"`
 	CollegeCode    string `json:"collegeCode"`
 	CollegeLogoURL string `json:"collegeLogoUrl"`
+	// *** ADDED Name to Claims ***
+	Name string `json:"name"` // Added user name for convenience
 }
 
 // Friendship represents friend connections between students (Module 3)

@@ -1,5 +1,5 @@
 // frontend/src/components/Sidebar.jsx
-import React from 'react'; // <-- Added React import
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -9,14 +9,13 @@ import {
   ChatBubbleLeftEllipsisIcon as ChatOutline,
   UsersIcon as FriendsOutline,
   UserCircleIcon as ProfileOutline,
+  ArchiveBoxIcon as MyListingsOutline,
+  ClockIcon as MyReservationsOutline, // *** IMPORT NEW ICON ***
 } from '@heroicons/react/24/outline';
 
 
 function Sidebar() {
-  const { user, totalUnreadCount, hasUnreadAnnouncements } = useAuth();
-
-  // +++ ADD LOGGING HERE +++
-  console.log("Sidebar Render - hasUnreadAnnouncements:", hasUnreadAnnouncements);
+  const { user, totalUnreadCount, hasUnreadAnnouncements, pendingRequestCount } = useAuth(); 
 
   const Icons = {
     Home: HomeOutline,
@@ -25,6 +24,8 @@ function Sidebar() {
     Chat: ChatOutline,
     Friends: FriendsOutline,
     Profile: ProfileOutline,
+    MyListings: MyListingsOutline,
+    MyReservations: MyReservationsOutline, // *** ADD ICON ***
   };
 
 
@@ -38,8 +39,11 @@ function Sidebar() {
 
   const secondaryNavLinks = [
     { name: 'My Profile', path: '/profile/me', icon: Icons.Profile },
+    { name: 'My Listings', path: '/market/my-listings', icon: Icons.MyListings },
+    { name: 'My Reservations', path: '/market/my-reservations', icon: Icons.MyReservations }, // *** ADD LINK ***
   ];
 
+  // ... (rest of the component remains the same) ...
   const baseLinkClass = "relative flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group";
   const inactiveLinkClass = "text-gray-600 hover:bg-gray-100 hover:text-gray-900";
   const activeLinkClass = "bg-indigo-50 text-indigo-600 font-semibold";
@@ -52,11 +56,13 @@ function Sidebar() {
     <aside className="w-64 flex-shrink-0 border-r border-gray-200 bg-white hidden md:flex flex-col">
       {/* Sidebar Header */}
       <div className="p-4 border-b border-gray-200 h-16 flex items-center">
-        <div className="flex items-center space-x-3 w-full">
+        {/* ... (header JSX) ... */}
+         <div className="flex items-center space-x-3 w-full">
           <img
             src={user?.profilePicture || fallbackAvatar(user?.name)}
             alt="Profile"
             className="w-9 h-9 rounded-full object-cover ring-1 ring-gray-100"
+            onError={(e) => { e.target.onerror = null; e.target.src = fallbackAvatar(user?.name); }}
           />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate" title={user?.name}>
@@ -73,66 +79,89 @@ function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {/* Primary Navigation */}
         <div className="space-y-0.5">
-          {primaryNavLinks.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.path}
-              className={({ isActive }) =>
-                `${baseLinkClass} ${isActive ? activeLinkClass : inactiveLinkClass}`
-              }
-            >
-              <item.icon
-                // Using className directly in NavLink should handle active state color for icon too if styled correctly
-                // Check if activeLinkClass/inactiveLinkClass apply text color that inherits
-                className={`w-5 h-5 mr-3 flex-shrink-0 ${
-                    // Explicitly setting icon color based on active state might be more reliable
-                    // This depends on how NavLink handles isActive propagation. Test both ways.
-                     NavLink.isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'
-                   }`}
-                strokeWidth={2}
-               />
-              <span className="ml-1">{item.name}</span>
+          {primaryNavLinks.map((item) => {
+             const linkClasses = ({ isActive }) =>
+               `${baseLinkClass} ${isActive ? activeLinkClass : inactiveLinkClass}`;
+             const iconClasses = ({ isActive }) =>
+               `w-5 h-5 mr-3 flex-shrink-0 ${
+                 isActive
+                   ? 'text-indigo-600'
+                   : 'text-gray-400 group-hover:text-gray-500'
+               }`;
 
-              {/* Chat Badge */}
-              {item.name === 'Chat' && totalUnreadCount > 0 && (
-                 <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
-                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                 </span>
-              )}
+            return (
+              <NavLink
+                key={item.name}
+                to={item.path}
+                className={linkClasses}
+                end={item.path === '/dashboard' || item.path === '/market'} 
+              >
+                 {({ isActive }) => (
+                    <>
+                        <item.icon
+                            className={iconClasses({ isActive })}
+                            strokeWidth={2}
+                        />
+                        <span className="ml-1">{item.name}</span>
 
-              {/* Feed Indicator */}
-              {item.name === 'Feed' && hasUnreadAnnouncements && (
-                 <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full transform translate-x-1/2 -translate-y-1/2 ring-2 ring-white">
-                    <span className="sr-only">New announcements</span>
-                 </span>
-              )}
-            </NavLink>
-          ))}
+                        {/* Badges */}
+                        {item.name === 'Chat' && totalUnreadCount > 0 && (
+                             <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
+                                {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                             </span>
+                        )}
+                        {item.name === 'Feed' && hasUnreadAnnouncements && (
+                             <span className="absolute top-1 right-1 h-2 w-2 bg-blue-500 rounded-full transform translate-x-1/2 -translate-y-1/2 ring-2 ring-white">
+                                <span className="sr-only">New announcements</span>
+                             </span>
+                        )}
+                        {item.name === 'Friends' && pendingRequestCount > 0 && (
+                            <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-amber-100 bg-amber-600 rounded-full transform translate-x-1/2 -translate-y-1/2">
+                                {pendingRequestCount > 9 ? '9+' : pendingRequestCount}
+                            </span>
+                        )}
+                    </>
+                 )}
+              </NavLink>
+            );
+          })}
         </div>
 
         {/* Divider & Secondary Navigation */}
         <div className="pt-4 mt-4 space-y-1 border-t border-gray-200">
-           {secondaryNavLinks.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.path}
-              className={({ isActive }) =>
-                `${baseLinkClass} ${isActive ? activeLinkClass : inactiveLinkClass}`
-              }
-            >
-               <item.icon
-                 className={`w-5 h-5 mr-3 flex-shrink-0 ${ NavLink.isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-500'}`}
-                 strokeWidth={2}
-               />
-              <span className="ml-1">{item.name}</span>
-            </NavLink>
-          ))}
+           {secondaryNavLinks.map((item) => {
+             const linkClasses = ({ isActive }) =>
+               `${baseLinkClass} ${isActive ? activeLinkClass : inactiveLinkClass}`;
+             const iconClasses = ({ isActive }) =>
+               `w-5 h-5 mr-3 flex-shrink-0 ${
+                 isActive
+                   ? 'text-indigo-600'
+                   : 'text-gray-400 group-hover:text-gray-500'
+               }`;
+
+             return (
+               <NavLink
+                 key={item.name}
+                 to={item.path}
+                 className={linkClasses}
+                 end={item.path === '/profile/me'}
+               >
+                 {({ isActive }) => (
+                   <>
+                     <item.icon className={iconClasses({ isActive })} strokeWidth={2} />
+                     <span className="ml-1">{item.name}</span>
+                   </>
+                 )}
+               </NavLink>
+             );
+           })}
         </div>
       </nav>
 
       {/* Sidebar Footer */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-xs text-gray-500 space-y-0.5">
+        {/* ... (footer JSX) ... */}
+         <div className="text-xs text-gray-500 space-y-0.5">
           <p className="font-semibold text-gray-700 mb-1 truncate" title={user?.collegeName}>
             {user?.collegeName}
           </p>
