@@ -326,7 +326,7 @@ function ListingDetailPage() {
             {listing.title}
           </h1>
           <p className="text-indigo-600 font-bold text-xl md:text-2xl">
-            ${listing.price.toFixed(2)}
+            ₹{listing.price.toFixed(2)}
           </p>
         </div>
 

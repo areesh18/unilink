@@ -8,7 +8,7 @@ import { ShoppingBagIcon, ArchiveBoxIcon, ClockIcon, CheckCircleIcon, PhotoIcon,
 const formatCurrency = (amount) => {
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount)) return '$--.--';
-    return `$${numericAmount.toFixed(2)}`;
+    return `₹${numericAmount.toFixed(2)}`;
 };
 
 // Status Badge Component

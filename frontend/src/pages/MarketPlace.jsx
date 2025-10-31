@@ -52,7 +52,7 @@ const ListingCard = ({ listing }) => {
         </h3>
         {/* Price */}
         <p className="text-indigo-600 font-bold text-base mb-1"> {/* Reduced mb */}
-          ${listing.price.toFixed(2)}
+          ₹{listing.price.toFixed(2)}
         </p>
         {/* Description - Reduced line-clamp and height */}
         <p className="text-xs text-gray-600 mb-2 line-clamp-2 h-8 flex-grow" title={listing.description}> {/* Reduced text size, mb, line-clamp, height */}

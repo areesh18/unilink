@@ -10,7 +10,7 @@ const formatCurrency = (amount) => {
     if (isNaN(numericAmount)) {
         return '$--.--';
     }
-    return `$${numericAmount.toFixed(2)}`;
+    return `₹${numericAmount.toFixed(2)}`;
 };
 
 // Helper to format date
